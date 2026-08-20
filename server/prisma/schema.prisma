@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// role: "admin" | "cashier" (SQLite has no native enum type; validated in app code)
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String   @default("cashier")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Warehouse {
+  id            Int      @id @default(autoincrement())
+  name          String
+  location      String?
+  contactPerson String?  @map("contact_person")
+  phone         String?
+  isActive      Boolean  @default(true) @map("is_active")
+
+  stock        Stock[]
+  stockLedger  StockLedger[]
+  invoices     Invoice[]
+
+  @@map("warehouses")
+}
+
+model Product {
+  id            Int      @id @default(autoincrement())
+  name          String
+  sku           String   @unique
+  barcode       String   @unique
+  category      String?
+  brand         String?
+  mrp           Decimal
+  sellingPrice  Decimal  @map("selling_price")
+  taxPercent    Decimal  @default(0) @map("tax_percent")
+  imageUrl      String?  @map("image_url")
+  unit          String   @default("pcs")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  stock        Stock[]
+  stockLedger  StockLedger[]
+  invoiceItems InvoiceItem[]
+
+  @@index([barcode])
+  @@map("products")
+}
+
+model Stock {
+  id           Int      @id @default(autoincrement())
+  productId    Int      @map("product_id")
+  warehouseId  Int      @map("warehouse_id")
+  quantity     Int      @default(0)
+  reorderLevel Int      @default(0) @map("reorder_level")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([productId, warehouseId])
+  @@map("stock")
+}
+
+// referenceType: "invoice" | "purchase" | "adjustment"
+model StockLedger {
+  id            Int      @id @default(autoincrement())
+  productId     Int      @map("product_id")
+  warehouseId   Int      @map("warehouse_id")
+  changeQty     Int      @map("change_qty")
+  balanceQty    Int      @map("balance_qty")
+  referenceType String   @map("reference_type")
+  referenceId   Int?     @map("reference_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@map("stock_ledger")
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  gstNumber String?  @map("gst_number")
+  address   String?
+
+  invoices Invoice[]
+
+  @@map("customers")
+}
+
+// status: "draft" | "paid" | "cancelled"; paymentMode: "cash" | "card" | "upi"
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  invoiceNumber String   @unique @map("invoice_number")
+  customerId    Int?     @map("customer_id")
+  warehouseId   Int      @map("warehouse_id")
+  subtotal      Decimal
+  taxAmount     Decimal  @map("tax_amount")
+  discount      Decimal  @default(0)
+  grandTotal    Decimal  @map("grand_total")
+  paymentMode   String   @map("payment_mode")
+  status        String   @default("paid")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  customer  Customer?     @relation(fields: [customerId], references: [id])
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  items     InvoiceItem[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id             Int     @id @default(autoincrement())
+  invoiceId      Int     @map("invoice_id")
+  productId      Int     @map("product_id")
+  barcodeScanned String? @map("barcode_scanned")
+  qty            Int
+  mrp            Decimal
+  price          Decimal
+  taxAmount      Decimal @map("tax_amount")
+  lineTotal      Decimal @map("line_total")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("invoice_items")
+}
