@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Camera, ScanLine, ShoppingCart, TriangleAlert } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import { useCart } from "../context/CartContext";
 import { ScanInput } from "../components/ScanInput";
@@ -109,7 +110,9 @@ export function Billing() {
     <div className="billing-page">
       <section className="scan-section">
         <div className="section-header">
-          <h2>Scan &amp; Lookup</h2>
+          <h2>
+            <ScanLine size={19} /> Scan &amp; Lookup
+          </h2>
           <label className="warehouse-select">
             Billing counter
             <select
@@ -129,11 +132,15 @@ export function Billing() {
         <ScanInput onScan={handleScan} />
 
         <button type="button" className="link-button" onClick={() => setShowCamera((v) => !v)}>
-          {showCamera ? "Hide camera scanner" : "Use phone camera instead"}
+          <Camera size={13} /> {showCamera ? "Hide camera scanner" : "Use phone camera instead"}
         </button>
         {showCamera && <CameraScanner onScan={handleScan} />}
 
-        {lookupError && <p className="error-text">{lookupError}</p>}
+        {lookupError && (
+          <p className="error-text">
+            <TriangleAlert size={14} /> {lookupError}
+          </p>
+        )}
         {scannedProduct && (
           <ProductLookupCard
             product={scannedProduct}
@@ -144,7 +151,9 @@ export function Billing() {
       </section>
 
       <section className="cart-section">
-        <h2>Cart</h2>
+        <h2>
+          <ShoppingCart size={19} /> Cart
+        </h2>
         <CartTable />
 
         <div className="customer-picker">

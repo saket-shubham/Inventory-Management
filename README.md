@@ -6,7 +6,7 @@ and auto-deduct stock in real time.
 
 ## Stack
 
-- **Server**: Node.js + Express + TypeScript, Prisma ORM, MySQL, JWT auth, pdfkit
+- **Server**: Node.js + Express + TypeScript, Prisma ORM, PostgreSQL, JWT auth, pdfkit
 - **Client**: React + Vite + TypeScript, react-router, axios, html5-qrcode
 
 ## Project layout
@@ -14,25 +14,26 @@ and auto-deduct stock in real time.
 ```
 server/   Express API (Prisma schema, routes, controllers, services)
 client/   React frontend (pages, components, contexts)
-docker-compose.yml   MySQL for local development
 ```
 
 ## Getting started
 
 ### 1. Database
 
-```bash
-docker compose up -d
+Requires a running PostgreSQL server (local install or otherwise) and an
+existing database. Set `DATABASE_URL` in `server/.env` accordingly, e.g.:
+
+```
+DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/yourdbname"
 ```
 
-This starts a MySQL 8 container on `localhost:3306` (db `billing_app`, root
-password `password`, matching `server/.env.example`).
+URL-encode any special characters in the password (e.g. `@` → `%40`).
 
 ### 2. Server
 
 ```bash
 cd server
-cp .env.example .env   # adjust JWT_SECRET / company info as desired
+cp .env.example .env   # set DATABASE_URL, JWT_SECRET, company info
 npm install
 npx prisma migrate dev --name init
 npm run seed            # creates warehouses, products, demo users

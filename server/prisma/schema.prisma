@@ -3,17 +3,21 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// role: "admin" | "cashier" (SQLite has no native enum type; validated in app code)
+enum UserRole {
+  admin
+  cashier
+}
+
 model User {
   id           Int      @id @default(autoincrement())
   name         String
   email        String   @unique
   passwordHash String   @map("password_hash")
-  role         String   @default("cashier")
+  role         UserRole @default(cashier)
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
 
@@ -42,9 +46,9 @@ model Product {
   barcode       String   @unique
   category      String?
   brand         String?
-  mrp           Decimal
-  sellingPrice  Decimal  @map("selling_price")
-  taxPercent    Decimal  @default(0) @map("tax_percent")
+  mrp           Decimal  @db.Decimal(10, 2)
+  sellingPrice  Decimal  @map("selling_price") @db.Decimal(10, 2)
+  taxPercent    Decimal  @default(0) @map("tax_percent") @db.Decimal(5, 2)
   imageUrl      String?  @map("image_url")
   unit          String   @default("pcs")
   isActive      Boolean  @default(true) @map("is_active")
@@ -74,16 +78,21 @@ model Stock {
   @@map("stock")
 }
 
-// referenceType: "invoice" | "purchase" | "adjustment"
+enum LedgerReferenceType {
+  invoice
+  purchase
+  adjustment
+}
+
 model StockLedger {
-  id            Int      @id @default(autoincrement())
-  productId     Int      @map("product_id")
-  warehouseId   Int      @map("warehouse_id")
-  changeQty     Int      @map("change_qty")
-  balanceQty    Int      @map("balance_qty")
-  referenceType String   @map("reference_type")
-  referenceId   Int?     @map("reference_id")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id            Int                 @id @default(autoincrement())
+  productId     Int                 @map("product_id")
+  warehouseId   Int                 @map("warehouse_id")
+  changeQty     Int                 @map("change_qty")
+  balanceQty    Int                 @map("balance_qty")
+  referenceType LedgerReferenceType @map("reference_type")
+  referenceId   Int?                @map("reference_id")
+  createdAt     DateTime            @default(now()) @map("created_at")
 
   product   Product   @relation(fields: [productId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
@@ -104,19 +113,30 @@ model Customer {
   @@map("customers")
 }
 
-// status: "draft" | "paid" | "cancelled"; paymentMode: "cash" | "card" | "upi"
+enum InvoiceStatus {
+  draft
+  paid
+  cancelled
+}
+
+enum PaymentMode {
+  cash
+  card
+  upi
+}
+
 model Invoice {
-  id            Int      @id @default(autoincrement())
-  invoiceNumber String   @unique @map("invoice_number")
-  customerId    Int?     @map("customer_id")
-  warehouseId   Int      @map("warehouse_id")
-  subtotal      Decimal
-  taxAmount     Decimal  @map("tax_amount")
-  discount      Decimal  @default(0)
-  grandTotal    Decimal  @map("grand_total")
-  paymentMode   String   @map("payment_mode")
-  status        String   @default("paid")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id            Int           @id @default(autoincrement())
+  invoiceNumber String        @unique @map("invoice_number")
+  customerId    Int?          @map("customer_id")
+  warehouseId   Int           @map("warehouse_id")
+  subtotal      Decimal       @db.Decimal(12, 2)
+  taxAmount     Decimal       @map("tax_amount") @db.Decimal(12, 2)
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  grandTotal    Decimal       @map("grand_total") @db.Decimal(12, 2)
+  paymentMode   PaymentMode   @map("payment_mode")
+  status        InvoiceStatus @default(paid)
+  createdAt     DateTime      @default(now()) @map("created_at")
 
   customer  Customer?     @relation(fields: [customerId], references: [id])
   warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
@@ -131,10 +151,10 @@ model InvoiceItem {
   productId      Int     @map("product_id")
   barcodeScanned String? @map("barcode_scanned")
   qty            Int
-  mrp            Decimal
-  price          Decimal
-  taxAmount      Decimal @map("tax_amount")
-  lineTotal      Decimal @map("line_total")
+  mrp            Decimal @db.Decimal(10, 2)
+  price          Decimal @db.Decimal(10, 2)
+  taxAmount      Decimal @map("tax_amount") @db.Decimal(10, 2)
+  lineTotal      Decimal @map("line_total") @db.Decimal(12, 2)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
   product Product @relation(fields: [productId], references: [id])

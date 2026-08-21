@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Download, PlusCircle } from "lucide-react";
 import { api } from "../api/client";
 import type { Invoice } from "../types";
 
@@ -42,10 +43,10 @@ export function InvoiceDetail() {
                 });
             }}
           >
-            Download / Print PDF
+            <Download size={15} /> Download / Print PDF
           </a>
           <Link to="/" className="button-link">
-            New sale
+            <PlusCircle size={15} /> New sale
           </Link>
         </div>
       </div>

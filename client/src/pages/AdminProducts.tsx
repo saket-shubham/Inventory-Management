@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { CheckCircle2, Package, PackagePlus, TriangleAlert } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import type { Product, Warehouse } from "../types";
 
@@ -72,10 +73,14 @@ export function AdminProducts() {
 
   return (
     <div className="admin-page">
-      <h2>Products</h2>
+      <h2>
+        <Package size={19} /> Products
+      </h2>
 
       <form className="admin-form" onSubmit={handleSubmit}>
-        <h3>Add new product</h3>
+        <h3>
+          <PackagePlus size={16} /> Add new product
+        </h3>
         <div className="form-grid">
           <label>
             Name
@@ -152,8 +157,16 @@ export function AdminProducts() {
           ))}
         </div>
 
-        {error && <p className="error-text">{error}</p>}
-        {success && <p className="success-text">{success}</p>}
+        {error && (
+          <p className="error-text">
+            <TriangleAlert size={14} /> {error}
+          </p>
+        )}
+        {success && (
+          <p className="success-text">
+            <CheckCircle2 size={14} /> {success}
+          </p>
+        )}
         <button type="submit" className="primary" disabled={submitting}>
           {submitting ? "Saving..." : "Save product"}
         </button>

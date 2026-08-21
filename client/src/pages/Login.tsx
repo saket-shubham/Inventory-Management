@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { ScanLine, TriangleAlert } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { apiErrorMessage } from "../api/client";
 
@@ -30,8 +31,15 @@ export function Login() {
   return (
     <div className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1>Billing App</h1>
-        <p className="muted">Sign in to continue</p>
+        <span className="brand-mark">
+          <ScanLine size={22} strokeWidth={2.4} />
+        </span>
+        <div>
+          <h1>Billing App</h1>
+          <p className="muted" style={{ margin: "4px 0 0" }}>
+            Sign in to start billing
+          </p>
+        </div>
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -40,12 +48,18 @@ export function Login() {
           Password
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
-        {error && <p className="error-text">{error}</p>}
-        <button type="submit" disabled={submitting}>
+        {error && (
+          <p className="error-text">
+            <TriangleAlert size={14} /> {error}
+          </p>
+        )}
+        <button type="submit" className="primary" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
-        <p className="muted small">
-          Seeded demo accounts: admin@example.com / cashier@example.com, password: password123
+        <p className="demo-hint">
+          Demo accounts: <strong>admin@example.com</strong> or <strong>cashier@example.com</strong>
+          <br />
+          Password: <strong>password123</strong>
         </p>
       </form>
     </div>

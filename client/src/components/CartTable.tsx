@@ -1,10 +1,16 @@
+import { ShoppingBag, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
 
 export function CartTable() {
   const { lines, updateQty, removeItem } = useCart();
 
   if (lines.length === 0) {
-    return <p className="muted">Cart is empty. Scan a product to add it.</p>;
+    return (
+      <div className="empty-state">
+        <ShoppingBag size={28} strokeWidth={1.6} />
+        <p className="muted">Cart is empty. Scan a product to add it.</p>
+      </div>
+    );
   }
 
   return (
@@ -43,7 +49,7 @@ export function CartTable() {
               <td>₹{lineTotal.toFixed(2)}</td>
               <td>
                 <button type="button" className="link-button" onClick={() => removeItem(line.product.id)}>
-                  Remove
+                  <X size={13} /> Remove
                 </button>
               </td>
             </tr>

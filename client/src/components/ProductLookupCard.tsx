@@ -1,3 +1,4 @@
+import { PackageX, Plus } from "lucide-react";
 import type { Product } from "../types";
 
 interface ProductLookupCardProps {
@@ -38,7 +39,15 @@ export function ProductLookupCard({ product, billingWarehouseId, onAddToCart }: 
             <span className="muted">+{Number(product.taxPercent)}% tax</span>
           </div>
           <button type="button" disabled={availableHere <= 0} onClick={onAddToCart}>
-            {availableHere > 0 ? "Add to cart" : "Out of stock here"}
+            {availableHere > 0 ? (
+              <>
+                <Plus size={15} /> Add to cart
+              </>
+            ) : (
+              <>
+                <PackageX size={15} /> Out of stock here
+              </>
+            )}
           </button>
         </div>
       </div>

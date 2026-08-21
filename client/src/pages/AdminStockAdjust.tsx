@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Boxes, CheckCircle2, TriangleAlert } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import type { Product, StockByWarehouse, Warehouse } from "../types";
 
@@ -99,7 +100,9 @@ export function AdminStockAdjust() {
 
   return (
     <div className="admin-page">
-      <h2>Stock Adjustment</h2>
+      <h2>
+        <Boxes size={19} /> Stock Adjustment
+      </h2>
 
       <label className="product-search">
         Search product by name / SKU / barcode
@@ -211,8 +214,16 @@ export function AdminStockAdjust() {
             </div>
           )}
 
-          {error && <p className="error-text">{error}</p>}
-          {message && <p className="success-text">{message}</p>}
+          {error && (
+            <p className="error-text">
+              <TriangleAlert size={14} /> {error}
+            </p>
+          )}
+          {message && (
+            <p className="success-text">
+              <CheckCircle2 size={14} /> {message}
+            </p>
+          )}
         </div>
       )}
     </div>

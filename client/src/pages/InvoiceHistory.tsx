@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Filter, History, ReceiptText } from "lucide-react";
 import { api } from "../api/client";
 import type { Invoice } from "../types";
 
@@ -26,7 +27,9 @@ export function InvoiceHistory() {
 
   return (
     <div className="invoice-history">
-      <h2>Invoice History</h2>
+      <h2>
+        <History size={19} /> Invoice History
+      </h2>
 
       <form
         className="filters"
@@ -58,7 +61,9 @@ export function InvoiceHistory() {
             onChange={(e) => setFilters({ ...filters, invoiceNumber: e.target.value })}
           />
         </label>
-        <button type="submit">Filter</button>
+        <button type="submit">
+          <Filter size={14} /> Filter
+        </button>
       </form>
 
       {loading ? (
@@ -80,7 +85,9 @@ export function InvoiceHistory() {
             {invoices.map((inv) => (
               <tr key={inv.id}>
                 <td>
-                  <Link to={`/invoices/${inv.id}`}>{inv.invoiceNumber}</Link>
+                  <Link to={`/invoices/${inv.id}`} className="invoice-number-link">
+                    <ReceiptText size={14} /> {inv.invoiceNumber}
+                  </Link>
                 </td>
                 <td>{new Date(inv.createdAt).toLocaleDateString()}</td>
                 <td>{inv.warehouse.name}</td>

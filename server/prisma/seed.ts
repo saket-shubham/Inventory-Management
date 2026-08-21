@@ -17,13 +17,13 @@ async function main() {
 
   const [mainStore, cityMall, warehouse2] = await Promise.all([
     prisma.warehouse.create({
-      data: { name: "Main Store", location: "MG Road, Pune", contactPerson: "Rahul Sharma", phone: "9876500001" },
+      data: { name: "Showroom 1", location: "MG Road, Pune", contactPerson: "Rahul Sharma", phone: "9876500001" },
     }),
     prisma.warehouse.create({
-      data: { name: "City Mall Outlet", location: "City Mall, Pune", contactPerson: "Priya Desai", phone: "9876500002" },
+      data: { name: "Showroom 2", location: "City Mall, Pune", contactPerson: "Priya Desai", phone: "9876500002" },
     }),
     prisma.warehouse.create({
-      data: { name: "Central Warehouse", location: "MIDC, Pune", contactPerson: "Amit Kulkarni", phone: "9876500003" },
+      data: { name: "Warehouse", location: "MIDC, Pune", contactPerson: "Amit Kulkarni", phone: "9876500003" },
     }),
   ]);
 
