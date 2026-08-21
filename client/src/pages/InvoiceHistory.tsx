@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Filter, History, ReceiptText } from "lucide-react";
 import { api } from "../api/client";
+import { StatusBadge } from "../components/StatusBadge";
 import type { Invoice } from "../types";
 
 export function InvoiceHistory() {
@@ -79,6 +80,7 @@ export function InvoiceHistory() {
               <th>Items</th>
               <th>Grand Total</th>
               <th>Payment</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -95,11 +97,14 @@ export function InvoiceHistory() {
                 <td>{inv.items.length}</td>
                 <td>₹{Number(inv.grandTotal).toFixed(2)}</td>
                 <td>{inv.paymentMode.toUpperCase()}</td>
+                <td>
+                  <StatusBadge status={inv.status} />
+                </td>
               </tr>
             ))}
             {invoices.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">
+                <td colSpan={8} className="muted">
                   No invoices found.
                 </td>
               </tr>

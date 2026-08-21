@@ -5,6 +5,9 @@ import warehouseRoutes from "./warehouses.routes";
 import customerRoutes from "./customers.routes";
 import stockRoutes from "./stock.routes";
 import invoiceRoutes from "./invoices.routes";
+import reportRoutes from "./reports.routes";
+import supplierRoutes from "./suppliers.routes";
+import purchaseRoutes from "./purchases.routes";
 
 const router = Router();
 
@@ -14,5 +17,8 @@ router.use("/warehouses", warehouseRoutes);
 router.use("/customers", customerRoutes);
 router.use("/stock", stockRoutes);
 router.use("/invoices", invoiceRoutes);
+router.use("/reports", reportRoutes);
+router.use("/suppliers", supplierRoutes);
+router.use("/purchases", purchaseRoutes);
 
 export default router;

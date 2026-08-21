@@ -90,6 +90,7 @@ export function Billing() {
         items: cart.lines.map((l) => ({
           productId: l.product.id,
           qty: l.qty,
+          discount: l.discount,
           barcodeScanned: l.barcodeScanned,
         })),
       });

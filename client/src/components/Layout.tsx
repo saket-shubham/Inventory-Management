@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { ScanLine, History, Package, Boxes, LogOut } from "lucide-react";
+import { ScanLine, History, Package, Boxes, LayoutDashboard, Truck, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export function Layout() {
@@ -31,11 +31,17 @@ export function Layout() {
           </NavLink>
           {user?.role === "admin" && (
             <>
+              <NavLink to="/admin/dashboard">
+                <LayoutDashboard size={15} /> Dashboard
+              </NavLink>
               <NavLink to="/admin/products">
                 <Package size={15} /> Products
               </NavLink>
               <NavLink to="/admin/stock">
                 <Boxes size={15} /> Stock
+              </NavLink>
+              <NavLink to="/admin/purchases">
+                <Truck size={15} /> Purchases
               </NavLink>
             </>
           )}

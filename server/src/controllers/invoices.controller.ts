@@ -18,6 +18,7 @@ const createInvoiceSchema = z.object({
         productId: z.number().int(),
         qty: z.number().int().positive(),
         barcodeScanned: z.string().optional(),
+        discount: z.number().nonnegative().default(0),
       })
     )
     .min(1, "Cart must contain at least one item"),
@@ -59,9 +60,12 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
       const product = productMap.get(item.productId)!;
       const price = product.sellingPrice;
       const lineBase = price.mul(item.qty);
-      const lineTax = lineBase.mul(product.taxPercent).div(100);
-      const lineTotal = lineBase.add(lineTax);
-      subtotal = subtotal.add(lineBase);
+      // Item discount is a rupee amount, clamped so it can't exceed the line's own base price.
+      const itemDiscount = Prisma.Decimal.min(new Prisma.Decimal(item.discount), lineBase);
+      const discountedBase = lineBase.sub(itemDiscount);
+      const lineTax = discountedBase.mul(product.taxPercent).div(100);
+      const lineTotal = discountedBase.add(lineTax);
+      subtotal = subtotal.add(discountedBase);
       taxAmount = taxAmount.add(lineTax);
       return {
         productId: product.id,
@@ -69,6 +73,7 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
         qty: item.qty,
         mrp: product.mrp,
         price,
+        discount: itemDiscount,
         taxAmount: lineTax,
         lineTotal,
       };
@@ -121,6 +126,50 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
   });
 
   res.status(201).json(invoice);
+});
+
+export const cancelInvoice = asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const invoice = await tx.invoice.findUnique({ where: { id }, include: { items: true } });
+    if (!invoice) throw new ApiError(404, "Invoice not found");
+    if (invoice.status !== "paid") {
+      throw new ApiError(400, `Invoice is already ${invoice.status}, cannot cancel`);
+    }
+
+    for (const item of invoice.items) {
+      const stock = await tx.stock.findUnique({
+        where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
+      });
+      const newQty = (stock?.quantity ?? 0) + item.qty;
+
+      await tx.stock.upsert({
+        where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
+        update: { quantity: newQty },
+        create: { productId: item.productId, warehouseId: invoice.warehouseId, quantity: newQty, reorderLevel: 0 },
+      });
+
+      await tx.stockLedger.create({
+        data: {
+          productId: item.productId,
+          warehouseId: invoice.warehouseId,
+          changeQty: item.qty,
+          balanceQty: newQty,
+          referenceType: "invoice",
+          referenceId: invoice.id,
+        },
+      });
+    }
+
+    return tx.invoice.update({
+      where: { id },
+      data: { status: "cancelled" },
+      include: { items: { include: { product: true } }, customer: true, warehouse: true },
+    });
+  });
+
+  res.json(updated);
 });
 
 export const getInvoice = asyncHandler(async (req: Request, res: Response) => {
@@ -193,6 +242,7 @@ export const downloadInvoicePdf = asyncHandler(async (req: Request, res: Respons
       qty: item.qty,
       mrp: Number(item.mrp),
       price: Number(item.price),
+      discount: Number(item.discount),
       taxAmount: Number(item.taxAmount),
       lineTotal: Number(item.lineTotal),
     })),

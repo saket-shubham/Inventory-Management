@@ -2,7 +2,7 @@ import { ShoppingBag, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
 
 export function CartTable() {
-  const { lines, updateQty, removeItem } = useCart();
+  const { lines, updateQty, updateDiscount, removeItem } = useCart();
 
   if (lines.length === 0) {
     return (
@@ -20,6 +20,7 @@ export function CartTable() {
           <th>Product</th>
           <th>Qty</th>
           <th>Price</th>
+          <th>Discount</th>
           <th>Tax</th>
           <th>Line total</th>
           <th />
@@ -28,8 +29,11 @@ export function CartTable() {
       <tbody>
         {lines.map((line) => {
           const price = Number(line.product.sellingPrice);
-          const tax = (price * line.qty * Number(line.product.taxPercent)) / 100;
-          const lineTotal = price * line.qty + tax;
+          const lineBase = price * line.qty;
+          const itemDiscount = Math.min(line.discount, lineBase);
+          const discountedBase = lineBase - itemDiscount;
+          const tax = (discountedBase * Number(line.product.taxPercent)) / 100;
+          const lineTotal = discountedBase + tax;
           return (
             <tr key={line.product.id}>
               <td>{line.product.name}</td>
@@ -45,6 +49,16 @@ export function CartTable() {
                 <span className="muted small"> / {line.availableAtBillingWarehouse} avail.</span>
               </td>
               <td>₹{price.toFixed(2)}</td>
+              <td>
+                <input
+                  type="number"
+                  min={0}
+                  max={lineBase}
+                  value={line.discount}
+                  onChange={(e) => updateDiscount(line.product.id, Number(e.target.value))}
+                  className="qty-input"
+                />
+              </td>
               <td>₹{tax.toFixed(2)}</td>
               <td>₹{lineTotal.toFixed(2)}</td>
               <td>

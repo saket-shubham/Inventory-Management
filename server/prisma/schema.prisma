@@ -35,6 +35,7 @@ model Warehouse {
   stock        Stock[]
   stockLedger  StockLedger[]
   invoices     Invoice[]
+  purchases    Purchase[]
 
   @@map("warehouses")
 }
@@ -55,9 +56,10 @@ model Product {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  stock        Stock[]
-  stockLedger  StockLedger[]
-  invoiceItems InvoiceItem[]
+  stock         Stock[]
+  stockLedger   StockLedger[]
+  invoiceItems  InvoiceItem[]
+  purchaseItems PurchaseItem[]
 
   @@index([barcode])
   @@map("products")
@@ -153,6 +155,7 @@ model InvoiceItem {
   qty            Int
   mrp            Decimal @db.Decimal(10, 2)
   price          Decimal @db.Decimal(10, 2)
+  discount       Decimal @default(0) @db.Decimal(10, 2)
   taxAmount      Decimal @map("tax_amount") @db.Decimal(10, 2)
   lineTotal      Decimal @map("line_total") @db.Decimal(12, 2)
 
@@ -160,4 +163,45 @@ model InvoiceItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@map("invoice_items")
+}
+
+model Supplier {
+  id      Int     @id @default(autoincrement())
+  name    String
+  phone   String?
+  email   String?
+  address String?
+
+  purchases Purchase[]
+
+  @@map("suppliers")
+}
+
+model Purchase {
+  id              Int      @id @default(autoincrement())
+  purchaseNumber  String   @unique @map("purchase_number")
+  supplierId      Int?     @map("supplier_id")
+  warehouseId     Int      @map("warehouse_id")
+  totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  supplier  Supplier?      @relation(fields: [supplierId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+  items     PurchaseItem[]
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         Int     @id @default(autoincrement())
+  purchaseId Int     @map("purchase_id")
+  productId  Int     @map("product_id")
+  qty        Int
+  costPrice  Decimal @map("cost_price") @db.Decimal(10, 2)
+  lineTotal  Decimal @map("line_total") @db.Decimal(12, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@map("purchase_items")
 }

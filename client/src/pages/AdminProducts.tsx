@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Package, PackagePlus, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Pencil, Package, PackagePlus, TriangleAlert, X } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import type { Product, Warehouse } from "../types";
 
@@ -21,6 +21,7 @@ export function AdminProducts() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [initialStock, setInitialStock] = useState<Record<number, string>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -35,34 +36,76 @@ export function AdminProducts() {
     api.get<Warehouse[]>("/warehouses").then((res) => setWarehouses(res.data));
   }, []);
 
+  function startEdit(product: Product) {
+    setEditingId(product.id);
+    setForm({
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode,
+      category: product.category ?? "",
+      brand: product.brand ?? "",
+      mrp: String(product.mrp),
+      sellingPrice: String(product.sellingPrice),
+      taxPercent: String(product.taxPercent),
+      unit: product.unit,
+      imageUrl: product.imageUrl ?? "",
+    });
+    setError(null);
+    setSuccess(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setInitialStock({});
+    setError(null);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     setSubmitting(true);
     try {
-      await api.post("/products", {
-        name: form.name,
-        sku: form.sku,
-        barcode: form.barcode,
-        category: form.category || undefined,
-        brand: form.brand || undefined,
-        mrp: Number(form.mrp),
-        sellingPrice: Number(form.sellingPrice),
-        taxPercent: Number(form.taxPercent),
-        unit: form.unit,
-        imageUrl: form.imageUrl || undefined,
-        initialStock: Object.entries(initialStock)
-          .filter(([, qty]) => qty.trim() !== "")
-          .map(([warehouseId, qty]) => ({
-            warehouseId: Number(warehouseId),
-            quantity: Number(qty),
-            reorderLevel: 0,
-          })),
-      });
-      setSuccess(`Product "${form.name}" created.`);
-      setForm(emptyForm);
-      setInitialStock({});
+      if (editingId) {
+        await api.put(`/products/${editingId}`, {
+          name: form.name,
+          category: form.category || undefined,
+          brand: form.brand || undefined,
+          mrp: Number(form.mrp),
+          sellingPrice: Number(form.sellingPrice),
+          taxPercent: Number(form.taxPercent),
+          unit: form.unit,
+          imageUrl: form.imageUrl || undefined,
+        });
+        setSuccess(`Product "${form.name}" updated.`);
+        setEditingId(null);
+        setForm(emptyForm);
+      } else {
+        await api.post("/products", {
+          name: form.name,
+          sku: form.sku,
+          barcode: form.barcode,
+          category: form.category || undefined,
+          brand: form.brand || undefined,
+          mrp: Number(form.mrp),
+          sellingPrice: Number(form.sellingPrice),
+          taxPercent: Number(form.taxPercent),
+          unit: form.unit,
+          imageUrl: form.imageUrl || undefined,
+          initialStock: Object.entries(initialStock)
+            .filter(([, qty]) => qty.trim() !== "")
+            .map(([warehouseId, qty]) => ({
+              warehouseId: Number(warehouseId),
+              quantity: Number(qty),
+              reorderLevel: 0,
+            })),
+        });
+        setSuccess(`Product "${form.name}" created.`);
+        setForm(emptyForm);
+        setInitialStock({});
+      }
       loadProducts();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -79,7 +122,15 @@ export function AdminProducts() {
 
       <form className="admin-form" onSubmit={handleSubmit}>
         <h3>
-          <PackagePlus size={16} /> Add new product
+          {editingId ? (
+            <>
+              <Pencil size={16} /> Edit product
+            </>
+          ) : (
+            <>
+              <PackagePlus size={16} /> Add new product
+            </>
+          )}
         </h3>
         <div className="form-grid">
           <label>
@@ -88,11 +139,21 @@ export function AdminProducts() {
           </label>
           <label>
             SKU
-            <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required />
+            <input
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+              required
+              disabled={!!editingId}
+            />
           </label>
           <label>
             Barcode
-            <input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} required />
+            <input
+              value={form.barcode}
+              onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+              required
+              disabled={!!editingId}
+            />
           </label>
           <label>
             Category
@@ -142,20 +203,24 @@ export function AdminProducts() {
           </label>
         </div>
 
-        <h4>Initial stock (optional)</h4>
-        <div className="form-grid">
-          {warehouses.map((w) => (
-            <label key={w.id}>
-              {w.name}
-              <input
-                type="number"
-                min={0}
-                value={initialStock[w.id] ?? ""}
-                onChange={(e) => setInitialStock({ ...initialStock, [w.id]: e.target.value })}
-              />
-            </label>
-          ))}
-        </div>
+        {!editingId && (
+          <>
+            <h4>Initial stock (optional)</h4>
+            <div className="form-grid">
+              {warehouses.map((w) => (
+                <label key={w.id}>
+                  {w.name}
+                  <input
+                    type="number"
+                    min={0}
+                    value={initialStock[w.id] ?? ""}
+                    onChange={(e) => setInitialStock({ ...initialStock, [w.id]: e.target.value })}
+                  />
+                </label>
+              ))}
+            </div>
+          </>
+        )}
 
         {error && (
           <p className="error-text">
@@ -167,9 +232,16 @@ export function AdminProducts() {
             <CheckCircle2 size={14} /> {success}
           </p>
         )}
-        <button type="submit" className="primary" disabled={submitting}>
-          {submitting ? "Saving..." : "Save product"}
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button type="submit" className="primary" disabled={submitting}>
+            {submitting ? "Saving..." : editingId ? "Update product" : "Save product"}
+          </button>
+          {editingId && (
+            <button type="button" className="link-button" onClick={cancelEdit}>
+              <X size={14} /> Cancel edit
+            </button>
+          )}
+        </div>
       </form>
 
       <h3>Existing products</h3>
@@ -182,6 +254,7 @@ export function AdminProducts() {
             <th>MRP</th>
             <th>Price</th>
             <th>Tax %</th>
+            <th />
           </tr>
         </thead>
         <tbody>
@@ -193,6 +266,11 @@ export function AdminProducts() {
               <td>₹{Number(p.mrp).toFixed(2)}</td>
               <td>₹{Number(p.sellingPrice).toFixed(2)}</td>
               <td>{Number(p.taxPercent)}%</td>
+              <td>
+                <button type="button" className="link-button" onClick={() => startEdit(p)}>
+                  <Pencil size={13} /> Edit
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

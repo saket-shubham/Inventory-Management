@@ -7,6 +7,7 @@ interface InvoicePdfItem {
   qty: number;
   mrp: number;
   price: number;
+  discount: number;
   taxAmount: number;
   lineTotal: number;
 }
@@ -56,12 +57,13 @@ export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {
 
   const tableTop = doc.y;
   const columns = [
-    { label: "Product", width: 170 },
-    { label: "Qty", width: 40 },
-    { label: "MRP", width: 60 },
-    { label: "Price", width: 60 },
-    { label: "Tax", width: 60 },
-    { label: "Total", width: 70 },
+    { label: "Product", width: 150 },
+    { label: "Qty", width: 35 },
+    { label: "MRP", width: 55 },
+    { label: "Price", width: 55 },
+    { label: "Disc.", width: 50 },
+    { label: "Tax", width: 55 },
+    { label: "Total", width: 60 },
   ];
 
   let x = 40;
@@ -80,6 +82,7 @@ export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {
       String(item.qty),
       money(item.mrp),
       money(item.price),
+      money(item.discount),
       money(item.taxAmount),
       money(item.lineTotal),
     ];

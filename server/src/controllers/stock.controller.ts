@@ -53,3 +53,24 @@ export const adjustStock = asyncHandler(async (req: Request, res: Response) => {
 
   res.json(result);
 });
+
+export const listLowStock = asyncHandler(async (_req: Request, res: Response) => {
+  const rows = await prisma.stock.findMany({
+    include: { product: true, warehouse: true },
+    orderBy: { quantity: "asc" },
+  });
+
+  const lowStock = rows
+    .filter((s) => s.product.isActive && s.quantity <= s.reorderLevel)
+    .map((s) => ({
+      productId: s.productId,
+      productName: s.product.name,
+      sku: s.product.sku,
+      warehouseId: s.warehouseId,
+      warehouseName: s.warehouse.name,
+      quantity: s.quantity,
+      reorderLevel: s.reorderLevel,
+    }));
+
+  res.json(lowStock);
+});

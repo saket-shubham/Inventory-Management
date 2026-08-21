@@ -140,3 +140,32 @@ export const createProduct = asyncHandler(async (req: Request, res: Response) =>
 
   res.status(201).json(product);
 });
+
+const updateProductSchema = z.object({
+  name: z.string().min(1).optional(),
+  category: z.string().optional(),
+  brand: z.string().optional(),
+  mrp: z.number().nonnegative().optional(),
+  sellingPrice: z.number().nonnegative().optional(),
+  taxPercent: z.number().min(0).max(100).optional(),
+  imageUrl: z.string().url().optional().or(z.literal("")),
+  unit: z.string().optional(),
+});
+
+export const updateProduct = asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const data = updateProductSchema.parse(req.body);
+
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) throw new ApiError(404, "Product not found");
+
+  const product = await prisma.product.update({
+    where: { id },
+    data: {
+      ...data,
+      ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
+    },
+  });
+
+  res.json(product);
+});
