@@ -8,6 +8,7 @@ import invoiceRoutes from "./invoices.routes";
 import reportRoutes from "./reports.routes";
 import supplierRoutes from "./suppliers.routes";
 import purchaseRoutes from "./purchases.routes";
+import supplierReturnRoutes from "./supplierReturns.routes";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use("/invoices", invoiceRoutes);
 router.use("/reports", reportRoutes);
 router.use("/suppliers", supplierRoutes);
 router.use("/purchases", purchaseRoutes);
+router.use("/supplier-returns", supplierReturnRoutes);
 
 export default router;

@@ -1,18 +1,25 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CalendarDays, LayoutDashboard, Receipt, TrendingUp } from "lucide-react";
+import { Link } from "react-router-dom";
+import { AlertTriangle, CalendarDays, LayoutDashboard, PackageX, Receipt, TrendingUp } from "lucide-react";
 import { api } from "../api/client";
-import type { LowStockRow, SalesSummary } from "../types";
+import type { DamagedStockRow, LowStockRow, SalesSummary } from "../types";
 
 export function Dashboard() {
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [lowStock, setLowStock] = useState<LowStockRow[]>([]);
+  const [damagedStock, setDamagedStock] = useState<DamagedStockRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get<SalesSummary>("/reports/summary"), api.get<LowStockRow[]>("/stock/low")])
-      .then(([summaryRes, lowStockRes]) => {
+    Promise.all([
+      api.get<SalesSummary>("/reports/summary"),
+      api.get<LowStockRow[]>("/stock/low"),
+      api.get<DamagedStockRow[]>("/stock/damaged"),
+    ])
+      .then(([summaryRes, lowStockRes, damagedRes]) => {
         setSummary(summaryRes.data);
         setLowStock(lowStockRes.data);
+        setDamagedStock(damagedRes.data);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -55,6 +62,16 @@ export function Dashboard() {
             <span className="stat-label">Low Stock Items</span>
             <span className="stat-value">{lowStock.length}</span>
             <span className="stat-sub">across all warehouses</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <span className="stat-icon">
+            <PackageX size={18} />
+          </span>
+          <div>
+            <span className="stat-label">Damaged Stock</span>
+            <span className="stat-value">{damagedStock.reduce((sum, d) => sum + d.damagedQuantity, 0)}</span>
+            <span className="stat-sub">units quarantined</span>
           </div>
         </div>
       </div>
@@ -153,6 +170,51 @@ export function Dashboard() {
                   )}
                 </td>
                 <td>{row.reorderLevel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="dashboard-panel" style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ marginBottom: 0 }}>
+            <PackageX size={16} /> Damaged Stock
+          </h3>
+          <Link to="/admin/stock" className="inline-link small">
+            Mark stock as damaged →
+          </Link>
+        </div>
+        <p className="muted small" style={{ margin: "6px 0 10px" }}>
+          Defective units that have been pulled out of sellable stock — from customer returns marked "defective," or
+          marked directly on the Stock page. Send them back to a supplier from Purchases → Return to Supplier.
+        </p>
+        <table className="cart-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Warehouse</th>
+              <th>Damaged qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {damagedStock.length === 0 && (
+              <tr>
+                <td colSpan={3} className="muted">
+                  No damaged/quarantined stock right now.
+                </td>
+              </tr>
+            )}
+            {damagedStock.map((row) => (
+              <tr key={`${row.productId}-${row.warehouseId}`}>
+                <td>
+                  {row.productName} <span className="muted small">({row.sku})</span>
+                </td>
+                <td>{row.warehouseName}</td>
+                <td>
+                  {row.damagedQuantity}
+                  <span className="out-of-stock-badge">damaged</span>
+                </td>
               </tr>
             ))}
           </tbody>

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   cancelInvoice,
   createInvoice,
+  createReturn,
   downloadInvoicePdf,
   getInvoice,
   listInvoices,
@@ -15,5 +16,6 @@ router.get("/", authenticate, listInvoices);
 router.get("/:id", authenticate, getInvoice);
 router.get("/:id/pdf", authenticate, downloadInvoicePdf);
 router.post("/:id/cancel", authenticate, authorize("admin"), cancelInvoice);
+router.post("/:id/return", authenticate, authorize("admin"), createReturn);
 
 export default router;

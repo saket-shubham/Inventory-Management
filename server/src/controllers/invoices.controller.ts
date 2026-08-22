@@ -5,6 +5,7 @@ import { prisma } from "../config/prisma";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generateInvoiceNumber } from "../services/invoiceNumber";
+import { generateReturnNumber } from "../services/returnNumber";
 import { streamInvoicePdf } from "../services/pdfService";
 
 const createInvoiceSchema = z.object({
@@ -172,11 +173,137 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
   res.json(updated);
 });
 
+const createReturnSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        invoiceItemId: z.number().int(),
+        qty: z.number().int().positive(),
+        reason: z.enum(["normal", "defective"]),
+      })
+    )
+    .min(1, "Select at least one item to return"),
+});
+
+export const createReturn = asyncHandler(async (req: Request, res: Response) => {
+  const invoiceId = Number(req.params.id);
+  const data = createReturnSchema.parse(req.body);
+
+  const created = await prisma.$transaction(async (tx) => {
+    const invoice = await tx.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { items: { include: { product: true } } },
+    });
+    if (!invoice) throw new ApiError(404, "Invoice not found");
+    if (invoice.status !== "paid") {
+      throw new ApiError(400, `Invoice is ${invoice.status}, cannot process a return against it`);
+    }
+
+    const invoiceItemMap = new Map(invoice.items.map((i) => [i.id, i]));
+    let totalRefund = new Prisma.Decimal(0);
+
+    const itemsData = data.items.map((reqItem) => {
+      const invoiceItem = invoiceItemMap.get(reqItem.invoiceItemId);
+      if (!invoiceItem) {
+        throw new ApiError(400, `Invoice item ${reqItem.invoiceItemId} does not belong to this invoice`);
+      }
+      const returnable = invoiceItem.qty - invoiceItem.returnedQty;
+      if (reqItem.qty > returnable) {
+        throw new ApiError(
+          400,
+          `Cannot return ${reqItem.qty} of "${invoiceItem.product.name}" — only ${returnable} left returnable`
+        );
+      }
+      const refundAmount = invoiceItem.lineTotal.div(invoiceItem.qty).mul(reqItem.qty);
+      totalRefund = totalRefund.add(refundAmount);
+      return {
+        invoiceItemId: invoiceItem.id,
+        productId: invoiceItem.productId,
+        qty: reqItem.qty,
+        reason: reqItem.reason,
+        refundAmount,
+      };
+    });
+
+    const returnNumber = await generateReturnNumber(tx);
+    const createdReturn = await tx.return.create({
+      data: {
+        returnNumber,
+        invoiceId: invoice.id,
+        totalRefund,
+        items: { create: itemsData },
+      },
+      include: { items: { include: { product: true } } },
+    });
+
+    for (const reqItem of data.items) {
+      const invoiceItem = invoiceItemMap.get(reqItem.invoiceItemId)!;
+
+      await tx.invoiceItem.update({
+        where: { id: invoiceItem.id },
+        data: { returnedQty: { increment: reqItem.qty } },
+      });
+
+      const stock = await tx.stock.findUnique({
+        where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
+      });
+
+      if (reqItem.reason === "normal") {
+        const newQty = (stock?.quantity ?? 0) + reqItem.qty;
+        await tx.stock.upsert({
+          where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
+          update: { quantity: newQty },
+          create: {
+            productId: invoiceItem.productId,
+            warehouseId: invoice.warehouseId,
+            quantity: newQty,
+            reorderLevel: 0,
+          },
+        });
+        await tx.stockLedger.create({
+          data: {
+            productId: invoiceItem.productId,
+            warehouseId: invoice.warehouseId,
+            changeQty: reqItem.qty,
+            balanceQty: newQty,
+            referenceType: "return",
+            referenceId: createdReturn.id,
+          },
+        });
+      } else {
+        const newDamagedQty = (stock?.damagedQuantity ?? 0) + reqItem.qty;
+        await tx.stock.upsert({
+          where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
+          update: { damagedQuantity: newDamagedQty },
+          create: {
+            productId: invoiceItem.productId,
+            warehouseId: invoice.warehouseId,
+            damagedQuantity: newDamagedQty,
+            reorderLevel: 0,
+          },
+        });
+        // Defective stock is quarantined, not sellable — it's fully audited by the
+        // Return/SupplierReturn tables themselves, so no StockLedger row here (that
+        // ledger tracks sellable-quantity movements only).
+      }
+    }
+
+    return createdReturn;
+  });
+
+  res.status(201).json(created);
+});
+
 export const getInvoice = asyncHandler(async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: { items: { include: { product: true } }, customer: true, warehouse: true },
+    include: {
+      items: { include: { product: true } },
+      customer: true,
+      warehouse: true,
+      returns: { include: { items: true }, orderBy: { createdAt: "desc" } },
+    },
   });
   if (!invoice) throw new ApiError(404, "Invoice not found");
   res.json(invoice);

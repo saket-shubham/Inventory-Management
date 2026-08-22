@@ -770,6 +770,52 @@ tr.current-warehouse:hover {
   line-height: 1.5;
 }
 
+.return-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 20px;
+  background: var(--tint-blue);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin: 4px 0;
+}
+
+.reason-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radio-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  font-weight: 500;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.radio-option input {
+  width: auto;
+}
+
+.returns-history {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.returns-history h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
 .invoice-detail-header {
   display: flex;
   justify-content: space-between;
@@ -1018,6 +1064,81 @@ tr.current-warehouse:hover {
   color: white;
 }
 
+.bulk-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+}
+
+.bulk-table {
+  min-width: 980px;
+}
+
+.bulk-table td {
+  padding: 6px;
+}
+
+.bulk-table input {
+  width: 100%;
+  min-width: 90px;
+}
+
+.bulk-table .qty-input {
+  min-width: 60px;
+}
+
+tr.bulk-row-error {
+  background: var(--danger-bg);
+}
+
+.bulk-row-error-text {
+  margin: 4px 0 0;
+  white-space: nowrap;
+}
+
+.product-name-toggle {
+  background: none;
+  box-shadow: none;
+  color: var(--text);
+  font-weight: 600;
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.product-name-toggle:hover:not(:disabled) {
+  background: var(--surface-alt);
+  color: var(--brand-700);
+}
+
+.stock-expand-cell {
+  background: var(--tint-blue);
+  padding: 10px 16px !important;
+}
+
+.stock-expand-cell .stock-table {
+  margin-top: 0;
+}
+
 .product-search {
   margin-bottom: 8px;
+}
+
+.help-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--tint-blue);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin: 10px 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.inline-link {
+  color: var(--brand-600);
+  font-weight: 600;
 }

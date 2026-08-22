@@ -59,6 +59,7 @@ export const getProductStock = asyncHandler(async (req: Request, res: Response) 
       warehouseId: s.warehouseId,
       warehouseName: s.warehouse.name,
       quantity: s.quantity,
+      damagedQuantity: s.damagedQuantity,
       reorderLevel: s.reorderLevel,
       lowStock: s.quantity <= s.reorderLevel,
     }))
@@ -139,6 +140,99 @@ export const createProduct = asyncHandler(async (req: Request, res: Response) =>
   });
 
   res.status(201).json(product);
+});
+
+const bulkProductRowSchema = z.object({
+  name: z.string().min(1),
+  sku: z.string().optional(),
+  barcode: z.string().min(1),
+  category: z.string().optional(),
+  brand: z.string().optional(),
+  mrp: z.number().nonnegative(),
+  sellingPrice: z.number().nonnegative(),
+  taxPercent: z.number().min(0).max(100).default(0),
+  unit: z.string().default("pcs"),
+  initialStock: z.number().int().nonnegative().optional(),
+});
+
+const bulkProductsSchema = z.object({
+  warehouseId: z.number().int().optional(),
+  products: z.array(bulkProductRowSchema).min(1, "Add at least one product row"),
+});
+
+export const createProductsBulk = asyncHandler(async (req: Request, res: Response) => {
+  const data = bulkProductsSchema.parse(req.body);
+
+  const existingCount = await prisma.product.count();
+  let nextSkuSeq = existingCount + 1;
+
+  const seenBarcodes = new Set<string>();
+  const seenSkus = new Set<string>();
+  const results: Array<
+    { index: number; success: true; product: Awaited<ReturnType<typeof prisma.product.create>> } | { index: number; success: false; error: string }
+  > = [];
+
+  for (let i = 0; i < data.products.length; i++) {
+    const item = data.products[i];
+    try {
+      if (seenBarcodes.has(item.barcode)) {
+        throw new Error(`Duplicate barcode "${item.barcode}" within this batch`);
+      }
+      const existingBarcode = await prisma.product.findUnique({ where: { barcode: item.barcode } });
+      if (existingBarcode) {
+        throw new Error(`Barcode "${item.barcode}" already exists`);
+      }
+      seenBarcodes.add(item.barcode);
+
+      let sku = item.sku?.trim();
+      if (sku) {
+        if (seenSkus.has(sku)) throw new Error(`Duplicate SKU "${sku}" within this batch`);
+        const existingSku = await prisma.product.findUnique({ where: { sku } });
+        if (existingSku) throw new Error(`SKU "${sku}" already exists`);
+      } else {
+        do {
+          sku = `SKU-${String(nextSkuSeq).padStart(4, "0")}`;
+          nextSkuSeq++;
+        } while (seenSkus.has(sku));
+      }
+      seenSkus.add(sku);
+
+      const product = await prisma.$transaction(async (tx) => {
+        const created = await tx.product.create({
+          data: {
+            name: item.name,
+            sku: sku!,
+            barcode: item.barcode,
+            category: item.category,
+            brand: item.brand,
+            mrp: item.mrp,
+            sellingPrice: item.sellingPrice,
+            taxPercent: item.taxPercent,
+            unit: item.unit,
+          },
+        });
+
+        if (data.warehouseId && item.initialStock) {
+          await tx.stock.create({
+            data: {
+              productId: created.id,
+              warehouseId: data.warehouseId,
+              quantity: item.initialStock,
+              reorderLevel: 0,
+            },
+          });
+        }
+
+        return created;
+      });
+
+      results.push({ index: i, success: true, product });
+    } catch (err) {
+      results.push({ index: i, success: false, error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }
+
+  res.json({ results });
 });
 
 const updateProductSchema = z.object({

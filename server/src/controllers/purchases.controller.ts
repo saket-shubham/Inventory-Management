@@ -91,7 +91,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
 
 export const listPurchases = asyncHandler(async (_req: Request, res: Response) => {
   const purchases = await prisma.purchase.findMany({
-    include: { supplier: true, warehouse: true, items: true },
+    include: { supplier: true, warehouse: true, items: { include: { product: true } } },
     orderBy: { createdAt: "desc" },
     take: 200,
   });

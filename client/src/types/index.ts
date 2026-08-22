@@ -21,6 +21,7 @@ export interface StockByWarehouse {
   warehouseName: string;
   location?: string | null;
   quantity: number;
+  damagedQuantity?: number;
   reorderLevel: number;
   lowStock: boolean;
 }
@@ -65,11 +66,33 @@ export interface InvoiceItem {
   product: { id: number; name: string; sku: string };
   barcodeScanned: string | null;
   qty: number;
+  returnedQty: number;
   mrp: string;
   price: string;
   discount: string;
   taxAmount: string;
   lineTotal: string;
+}
+
+export type ReturnReason = "normal" | "defective";
+
+export interface ReturnItem {
+  id: number;
+  invoiceItemId: number;
+  productId: number;
+  qty: number;
+  reason: ReturnReason;
+  refundAmount: string;
+  product?: { id: number; name: string; sku: string };
+}
+
+export interface Return {
+  id: number;
+  returnNumber: string;
+  invoiceId: number;
+  totalRefund: string;
+  createdAt: string;
+  items: ReturnItem[];
 }
 
 export interface Invoice {
@@ -87,6 +110,7 @@ export interface Invoice {
   status: "draft" | "paid" | "cancelled";
   createdAt: string;
   items: InvoiceItem[];
+  returns: Return[];
 }
 
 export interface LowStockRow {
@@ -97,6 +121,15 @@ export interface LowStockRow {
   warehouseName: string;
   quantity: number;
   reorderLevel: number;
+}
+
+export interface DamagedStockRow {
+  productId: number;
+  productName: string;
+  sku: string;
+  warehouseId: number;
+  warehouseName: string;
+  damagedQuantity: number;
 }
 
 export interface SalesSummary {
@@ -133,4 +166,22 @@ export interface Purchase {
   totalAmount: string;
   createdAt: string;
   items: PurchaseItem[];
+}
+
+export interface SupplierReturnItem {
+  id: number;
+  productId: number;
+  product: { id: number; name: string; sku: string };
+  qty: number;
+}
+
+export interface SupplierReturn {
+  id: number;
+  returnNumber: string;
+  supplierId: number | null;
+  supplier: Supplier | null;
+  warehouseId: number;
+  warehouse: Warehouse;
+  createdAt: string;
+  items: SupplierReturnItem[];
 }

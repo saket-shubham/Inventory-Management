@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createProduct,
+  createProductsBulk,
   getProductStock,
   listProducts,
   lookupByBarcode,
@@ -14,6 +15,7 @@ router.get("/lookup", authenticate, lookupByBarcode);
 router.get("/:id/stock", authenticate, getProductStock);
 router.get("/", authenticate, listProducts);
 router.post("/", authenticate, authorize("admin"), createProduct);
+router.post("/bulk", authenticate, authorize("admin"), createProductsBulk);
 router.put("/:id", authenticate, authorize("admin"), updateProduct);
 
 export default router;
