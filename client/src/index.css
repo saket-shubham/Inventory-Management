@@ -1095,6 +1095,40 @@ tr.bulk-row-error {
   white-space: nowrap;
 }
 
+.inline-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.inline-checkbox input {
+  width: auto;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+button.link-button.danger-link {
+  color: var(--danger);
+}
+
 .product-name-toggle {
   background: none;
   box-shadow: none;

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  Ban,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -8,6 +9,7 @@ import {
   Package,
   PackagePlus,
   Plus,
+  RotateCcw,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -84,8 +86,13 @@ export function AdminProducts() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkSummary, setBulkSummary] = useState<string | null>(null);
 
-  async function loadProducts() {
-    const res = await api.get<Product[]>("/products");
+  const [showInactive, setShowInactive] = useState(false);
+  const [statusChangingId, setStatusChangingId] = useState<number | null>(null);
+  const [confirmingDeactivateId, setConfirmingDeactivateId] = useState<number | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  async function loadProducts(includeInactive = showInactive) {
+    const res = await api.get<Product[]>("/products", { params: includeInactive ? { includeInactive: "true" } : {} });
     setProducts(res.data);
   }
 
@@ -96,7 +103,40 @@ export function AdminProducts() {
       const defaultWarehouse = res.data.find((w) => w.name === "Warehouse") ?? res.data[0];
       if (defaultWarehouse) setBulkWarehouseId(defaultWarehouse.id);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    loadProducts(showInactive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInactive]);
+
+  async function deactivateProduct(id: number) {
+    setStatusChangingId(id);
+    setStatusError(null);
+    try {
+      await api.put(`/products/${id}`, { isActive: false });
+      setConfirmingDeactivateId(null);
+      loadProducts();
+    } catch (err) {
+      setStatusError(apiErrorMessage(err));
+    } finally {
+      setStatusChangingId(null);
+    }
+  }
+
+  async function reactivateProduct(id: number) {
+    setStatusChangingId(id);
+    setStatusError(null);
+    try {
+      await api.put(`/products/${id}`, { isActive: true });
+      loadProducts();
+    } catch (err) {
+      setStatusError(apiErrorMessage(err));
+    } finally {
+      setStatusChangingId(null);
+    }
+  }
 
   function startEdit(product: Product) {
     setEditingId(product.id);
@@ -535,7 +575,20 @@ export function AdminProducts() {
         )}
       </div>
 
-      <h3>Existing products</h3>
+      <div className="section-header" style={{ marginBottom: 8 }}>
+        <h3 style={{ marginBottom: 0 }}>Existing products</h3>
+        <label className="inline-checkbox">
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+          Show inactive products
+        </label>
+      </div>
+
+      {statusError && (
+        <p className="error-text">
+          <TriangleAlert size={14} /> {statusError}
+        </p>
+      )}
+
       <table className="cart-table">
         <thead>
           <tr>
@@ -545,6 +598,7 @@ export function AdminProducts() {
             <th>MRP</th>
             <th>Price</th>
             <th>Tax %</th>
+            {showInactive && <th>Status</th>}
             <th />
           </tr>
         </thead>
@@ -563,15 +617,61 @@ export function AdminProducts() {
                 <td>₹{Number(p.mrp).toFixed(2)}</td>
                 <td>₹{Number(p.sellingPrice).toFixed(2)}</td>
                 <td>{Number(p.taxPercent)}%</td>
-                <td>
-                  <button type="button" className="link-button" onClick={() => startEdit(p)}>
-                    <Pencil size={13} /> Edit
-                  </button>
+                {showInactive && (
+                  <td>
+                    {p.isActive === false ? (
+                      <span className="out-of-stock-badge">inactive</span>
+                    ) : (
+                      <span className="discount-badge">active</span>
+                    )}
+                  </td>
+                )}
+                <td className="row-actions">
+                  {confirmingDeactivateId === p.id ? (
+                    <span className="inline-confirm">
+                      Deactivate?
+                      <button
+                        type="button"
+                        className="link-button danger-link"
+                        disabled={statusChangingId === p.id}
+                        onClick={() => deactivateProduct(p.id)}
+                      >
+                        Yes
+                      </button>
+                      <button type="button" className="link-button" onClick={() => setConfirmingDeactivateId(null)}>
+                        No
+                      </button>
+                    </span>
+                  ) : (
+                    <>
+                      <button type="button" className="link-button" onClick={() => startEdit(p)}>
+                        <Pencil size={13} /> Edit
+                      </button>
+                      {p.isActive === false ? (
+                        <button
+                          type="button"
+                          className="link-button"
+                          disabled={statusChangingId === p.id}
+                          onClick={() => reactivateProduct(p.id)}
+                        >
+                          <RotateCcw size={13} /> Reactivate
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="link-button danger-link"
+                          onClick={() => setConfirmingDeactivateId(p.id)}
+                        >
+                          <Ban size={13} /> Deactivate
+                        </button>
+                      )}
+                    </>
+                  )}
                 </td>
               </tr>
               {expandedProductId === p.id && (
                 <tr>
-                  <td colSpan={7} className="stock-expand-cell">
+                  <td colSpan={showInactive ? 8 : 7} className="stock-expand-cell">
                     {stockLoadingId === p.id ? (
                       <p className="muted small">Loading stock...</p>
                     ) : (

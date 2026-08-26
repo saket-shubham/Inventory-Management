@@ -38,6 +38,7 @@ export interface Product {
   taxPercent: string;
   imageUrl: string | null;
   unit: string;
+  isActive?: boolean;
   stockByWarehouse?: StockByWarehouse[];
 }
 

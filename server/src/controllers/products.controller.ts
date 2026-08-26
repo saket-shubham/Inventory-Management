@@ -68,9 +68,10 @@ export const getProductStock = asyncHandler(async (req: Request, res: Response) 
 
 export const listProducts = asyncHandler(async (req: Request, res: Response) => {
   const search = String(req.query.search ?? "").trim();
+  const includeInactive = req.query.includeInactive === "true";
   const products = await prisma.product.findMany({
     where: {
-      isActive: true,
+      ...(includeInactive ? {} : { isActive: true }),
       ...(search
         ? {
             OR: [
@@ -244,6 +245,7 @@ const updateProductSchema = z.object({
   taxPercent: z.number().min(0).max(100).optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   unit: z.string().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const updateProduct = asyncHandler(async (req: Request, res: Response) => {

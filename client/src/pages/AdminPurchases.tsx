@@ -15,8 +15,9 @@ import type { DamagedStockRow, Product, Purchase, Supplier, SupplierReturn, Ware
 
 interface PurchaseLine {
   product: Product;
-  qty: number;
-  costPrice: number;
+  totalQty: string;
+  costPrice: string;
+  allocations: Record<number, string>;
 }
 
 interface ReturnLine {
@@ -100,7 +101,7 @@ export function AdminPurchases() {
   function addProductLine(product: Product) {
     setLines((prev) => {
       if (prev.some((l) => l.product.id === product.id)) return prev;
-      return [...prev, { product, qty: 1, costPrice: Number(product.sellingPrice) }];
+      return [...prev, { product, totalQty: "", costPrice: String(product.sellingPrice), allocations: {} }];
     });
     setProductSearch("");
     setProductResults([]);
@@ -110,29 +111,57 @@ export function AdminPurchases() {
     setLines((prev) => prev.map((l) => (l.product.id === productId ? { ...l, ...patch } : l)));
   }
 
+  function updateAllocation(productId: number, warehouseIdKey: number, value: string) {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.product.id === productId ? { ...l, allocations: { ...l.allocations, [warehouseIdKey]: value } } : l
+      )
+    );
+  }
+
   function removeLine(productId: number) {
     setLines((prev) => prev.filter((l) => l.product.id !== productId));
   }
 
-  const totalAmount = lines.reduce((sum, l) => sum + l.qty * l.costPrice, 0);
+  function lineAllocated(line: PurchaseLine): number {
+    return warehouses.reduce((sum, w) => sum + (Number(line.allocations[w.id]) || 0), 0);
+  }
+
+  function lineRemaining(line: PurchaseLine): number {
+    return (Number(line.totalQty) || 0) - lineAllocated(line);
+  }
+
+  const totalAmount = lines.reduce((sum, l) => sum + (Number(l.totalQty) || 0) * (Number(l.costPrice) || 0), 0);
+  const linesBalanced = lines.length > 0 && lines.every((l) => Number(l.totalQty) > 0 && lineRemaining(l) === 0);
 
   async function handleSubmit() {
-    if (!warehouseId || lines.length === 0) return;
+    if (!linesBalanced) return;
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    const savedPOs: string[] = [];
     try {
-      const res = await api.post<Purchase>("/purchases", {
-        warehouseId,
-        supplierId: selectedSupplier?.id,
-        items: lines.map((l) => ({ productId: l.product.id, qty: l.qty, costPrice: l.costPrice })),
-      });
-      setSuccess(`Purchase ${res.data.purchaseNumber} recorded — stock updated.`);
+      for (const w of warehouses) {
+        const items = lines
+          .map((l) => ({ productId: l.product.id, qty: Number(l.allocations[w.id]) || 0, costPrice: Number(l.costPrice) || 0 }))
+          .filter((i) => i.qty > 0);
+        if (items.length === 0) continue;
+
+        const res = await api.post<Purchase>("/purchases", {
+          warehouseId: w.id,
+          supplierId: selectedSupplier?.id,
+          items,
+        });
+        savedPOs.push(`${res.data.purchaseNumber} (${w.name})`);
+      }
+      setSuccess(`Recorded ${savedPOs.length} purchase${savedPOs.length !== 1 ? "s" : ""}: ${savedPOs.join(", ")}`);
       setLines([]);
       setSelectedSupplier(null);
       loadPurchases();
     } catch (err) {
-      setError(apiErrorMessage(err));
+      setError(
+        (savedPOs.length > 0 ? `Saved so far: ${savedPOs.join(", ")}. ` : "") + apiErrorMessage(err)
+      );
     } finally {
       setSubmitting(false);
     }
@@ -256,25 +285,16 @@ export function AdminPurchases() {
             <ShoppingBasket size={16} /> New purchase
           </h3>
 
-          <div className="form-grid">
-            <label>
-              Warehouse
-              <select value={warehouseId} onChange={(e) => setWarehouseId(Number(e.target.value))}>
-                <option value="">Select</option>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
           {supplierPicker}
 
           <h4 style={{ marginTop: 18 }}>
             <PackageSearch size={15} /> Add products
           </h4>
+          <p className="help-text">
+            <PackageSearch size={14} /> Enter the <strong>total quantity you actually received</strong> per your
+            supplier's slip, then split it across warehouses below. The split must add up exactly to the total
+            before you can save — no more guessing where everything went.
+          </p>
           <input
             placeholder="Search product by name / SKU / barcode"
             value={productSearch}
@@ -293,48 +313,81 @@ export function AdminPurchases() {
           )}
 
           {lines.length > 0 && (
-            <table className="cart-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Qty</th>
-                  <th>Cost price</th>
-                  <th>Line total</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l) => (
-                  <tr key={l.product.id}>
-                    <td>{l.product.name}</td>
-                    <td>
-                      <input
-                        type="number"
-                        min={1}
-                        value={l.qty}
-                        onChange={(e) => updateLine(l.product.id, { qty: Math.max(1, Number(e.target.value)) })}
-                        className="qty-input"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min={0}
-                        value={l.costPrice}
-                        onChange={(e) => updateLine(l.product.id, { costPrice: Math.max(0, Number(e.target.value)) })}
-                        className="qty-input"
-                      />
-                    </td>
-                    <td>₹{(l.qty * l.costPrice).toFixed(2)}</td>
-                    <td>
-                      <button type="button" className="link-button" onClick={() => removeLine(l.product.id)}>
-                        <X size={13} /> Remove
-                      </button>
-                    </td>
+            <div className="bulk-table-wrap">
+              <table className="cart-table bulk-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Total received</th>
+                    <th>Cost price</th>
+                    {warehouses.map((w) => (
+                      <th key={w.id}>{w.name}</th>
+                    ))}
+                    <th>Remaining</th>
+                    <th>Line total</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {lines.map((l) => {
+                    const remaining = lineRemaining(l);
+                    const total = Number(l.totalQty) || 0;
+                    const lineTotal = total * (Number(l.costPrice) || 0);
+                    return (
+                      <tr key={l.product.id} className={remaining !== 0 && total > 0 ? "bulk-row-error" : ""}>
+                        <td>{l.product.name}</td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            className="qty-input"
+                            value={l.totalQty}
+                            onChange={(e) => updateLine(l.product.id, { totalQty: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            className="qty-input"
+                            value={l.costPrice}
+                            onChange={(e) => updateLine(l.product.id, { costPrice: e.target.value })}
+                          />
+                        </td>
+                        {warehouses.map((w) => (
+                          <td key={w.id}>
+                            <input
+                              type="number"
+                              min={0}
+                              className="qty-input"
+                              value={l.allocations[w.id] ?? ""}
+                              onChange={(e) => updateAllocation(l.product.id, w.id, e.target.value)}
+                            />
+                          </td>
+                        ))}
+                        <td>
+                          {total === 0 ? (
+                            <span className="muted small">enter total</span>
+                          ) : remaining === 0 ? (
+                            <span className="discount-badge">balanced</span>
+                          ) : remaining > 0 ? (
+                            <span className="low-stock-badge">{remaining} left</span>
+                          ) : (
+                            <span className="out-of-stock-badge">over by {-remaining}</span>
+                          )}
+                        </td>
+                        <td>₹{lineTotal.toFixed(2)}</td>
+                        <td>
+                          <button type="button" className="link-button" onClick={() => removeLine(l.product.id)}>
+                            <X size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {lines.length > 0 && (
@@ -360,7 +413,7 @@ export function AdminPurchases() {
             type="button"
             className="primary"
             style={{ marginTop: 14 }}
-            disabled={!warehouseId || lines.length === 0 || submitting}
+            disabled={!linesBalanced || submitting}
             onClick={handleSubmit}
           >
             {submitting ? "Recording..." : "Record purchase"}
