@@ -32,10 +32,10 @@ model Warehouse {
   phone         String?
   isActive      Boolean  @default(true) @map("is_active")
 
-  stock          Stock[]
-  stockLedger    StockLedger[]
-  invoices       Invoice[]
-  purchases      Purchase[]
+  stock           Stock[]
+  stockLedger     StockLedger[]
+  invoices        Invoice[]
+  purchaseItems   PurchaseItem[]
   supplierReturns SupplierReturn[]
 
   @@map("warehouses")
@@ -224,27 +224,27 @@ model Purchase {
   id              Int      @id @default(autoincrement())
   purchaseNumber  String   @unique @map("purchase_number")
   supplierId      Int?     @map("supplier_id")
-  warehouseId     Int      @map("warehouse_id")
   totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
   createdAt       DateTime @default(now()) @map("created_at")
 
-  supplier  Supplier?      @relation(fields: [supplierId], references: [id])
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  items     PurchaseItem[]
+  supplier Supplier?      @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
 
   @@map("purchases")
 }
 
 model PurchaseItem {
-  id         Int     @id @default(autoincrement())
-  purchaseId Int     @map("purchase_id")
-  productId  Int     @map("product_id")
-  qty        Int
-  costPrice  Decimal @map("cost_price") @db.Decimal(10, 2)
-  lineTotal  Decimal @map("line_total") @db.Decimal(12, 2)
+  id          Int     @id @default(autoincrement())
+  purchaseId  Int     @map("purchase_id")
+  productId   Int     @map("product_id")
+  warehouseId Int     @map("warehouse_id")
+  qty         Int
+  costPrice   Decimal @map("cost_price") @db.Decimal(10, 2)
+  lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
+  purchase  Purchase  @relation(fields: [purchaseId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
 
   @@map("purchase_items")
 }

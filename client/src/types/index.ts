@@ -38,6 +38,7 @@ export interface Product {
   taxPercent: string;
   imageUrl: string | null;
   unit: string;
+  isActive?: boolean;
   stockByWarehouse?: StockByWarehouse[];
 }
 
@@ -151,6 +152,8 @@ export interface PurchaseItem {
   id: number;
   productId: number;
   product: { id: number; name: string; sku: string };
+  warehouseId: number;
+  warehouse: { id: number; name: string };
   qty: number;
   costPrice: string;
   lineTotal: string;
@@ -161,8 +164,6 @@ export interface Purchase {
   purchaseNumber: string;
   supplierId: number | null;
   supplier: Supplier | null;
-  warehouseId: number;
-  warehouse: Warehouse;
   totalAmount: string;
   createdAt: string;
   items: PurchaseItem[];

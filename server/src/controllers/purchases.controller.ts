@@ -7,12 +7,12 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { generatePurchaseNumber } from "../services/purchaseNumber";
 
 const createPurchaseSchema = z.object({
-  warehouseId: z.number().int(),
   supplierId: z.number().int().optional(),
   items: z
     .array(
       z.object({
         productId: z.number().int(),
+        warehouseId: z.number().int(),
         qty: z.number().int().positive(),
         costPrice: z.number().nonnegative(),
       })
@@ -24,7 +24,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
   const data = createPurchaseSchema.parse(req.body);
 
   const purchase = await prisma.$transaction(async (tx) => {
-    const productIds = data.items.map((i) => i.productId);
+    const productIds = [...new Set(data.items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -40,6 +40,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
       totalAmount = totalAmount.add(lineTotal);
       return {
         productId: item.productId,
+        warehouseId: item.warehouseId,
         qty: item.qty,
         costPrice: item.costPrice,
         lineTotal,
@@ -52,29 +53,28 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
       data: {
         purchaseNumber,
         supplierId: data.supplierId,
-        warehouseId: data.warehouseId,
         totalAmount,
         items: { create: itemsData },
       },
-      include: { items: { include: { product: true } }, supplier: true, warehouse: true },
+      include: { items: { include: { product: true, warehouse: true } }, supplier: true },
     });
 
     for (const item of data.items) {
       const existing = await tx.stock.findUnique({
-        where: { productId_warehouseId: { productId: item.productId, warehouseId: data.warehouseId } },
+        where: { productId_warehouseId: { productId: item.productId, warehouseId: item.warehouseId } },
       });
       const newQty = (existing?.quantity ?? 0) + item.qty;
 
       await tx.stock.upsert({
-        where: { productId_warehouseId: { productId: item.productId, warehouseId: data.warehouseId } },
+        where: { productId_warehouseId: { productId: item.productId, warehouseId: item.warehouseId } },
         update: { quantity: newQty },
-        create: { productId: item.productId, warehouseId: data.warehouseId, quantity: newQty, reorderLevel: 0 },
+        create: { productId: item.productId, warehouseId: item.warehouseId, quantity: newQty, reorderLevel: 0 },
       });
 
       await tx.stockLedger.create({
         data: {
           productId: item.productId,
-          warehouseId: data.warehouseId,
+          warehouseId: item.warehouseId,
           changeQty: item.qty,
           balanceQty: newQty,
           referenceType: "purchase",
@@ -91,7 +91,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
 
 export const listPurchases = asyncHandler(async (_req: Request, res: Response) => {
   const purchases = await prisma.purchase.findMany({
-    include: { supplier: true, warehouse: true, items: { include: { product: true } } },
+    include: { supplier: true, items: { include: { product: true, warehouse: true } } },
     orderBy: { createdAt: "desc" },
     take: 200,
   });
@@ -102,7 +102,7 @@ export const getPurchase = asyncHandler(async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const purchase = await prisma.purchase.findUnique({
     where: { id },
-    include: { items: { include: { product: true } }, supplier: true, warehouse: true },
+    include: { items: { include: { product: true, warehouse: true } }, supplier: true },
   });
   if (!purchase) throw new ApiError(404, "Purchase not found");
   res.json(purchase);
