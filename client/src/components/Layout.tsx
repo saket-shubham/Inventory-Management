@@ -1,6 +1,43 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { ScanLine, History, Package, Boxes, LayoutDashboard, Truck, LogOut } from "lucide-react";
+import { ScanLine, History, Package, Boxes, LayoutDashboard, Truck, LogOut, Sun, Moon } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useTheme, type ThemeAccent } from "../context/ThemeContext";
+
+const ACCENTS: { value: ThemeAccent; label: string; swatch: string }[] = [
+  { value: "violet", label: "Violet", swatch: "#6366f1" },
+  { value: "blue", label: "Blue", swatch: "#0ea5e9" },
+  { value: "green", label: "Green", swatch: "#10b981" },
+];
+
+function ThemeSwitcher() {
+  const { mode, accent, toggleMode, setAccent } = useTheme();
+  return (
+    <div className="theme-switcher">
+      <div className="accent-swatches">
+        {ACCENTS.map((a) => (
+          <button
+            key={a.value}
+            type="button"
+            className={`accent-swatch${accent === a.value ? " active" : ""}`}
+            style={{ background: a.swatch }}
+            title={a.label}
+            aria-label={`${a.label} accent`}
+            onClick={() => setAccent(a.value)}
+          />
+        ))}
+      </div>
+      <button
+        type="button"
+        className="mode-switch-btn"
+        onClick={toggleMode}
+        title={mode === "light" ? "Switch to dark mode" : "Switch to light mode"}
+        aria-label="Toggle color mode"
+      >
+        {mode === "light" ? <Moon size={16} /> : <Sun size={16} />}
+      </button>
+    </div>
+  );
+}
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -47,6 +84,7 @@ export function Layout() {
           )}
         </nav>
         <div className="user-info">
+          <ThemeSwitcher />
           <span className="user-chip">
             <span className="avatar">{initials}</span>
             {user?.name}
