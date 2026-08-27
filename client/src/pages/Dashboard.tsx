@@ -34,9 +34,9 @@ export function Dashboard() {
       </h2>
 
       <div className="stat-cards">
-        <div className="stat-card">
+        <div className="stat-card stat-sales-today">
           <span className="stat-icon">
-            <CalendarDays size={18} />
+            <CalendarDays size={20} />
           </span>
           <div>
             <span className="stat-label">Today's Sales</span>
@@ -44,9 +44,9 @@ export function Dashboard() {
             <span className="stat-sub">{summary.today.invoiceCount} invoice(s)</span>
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-sales-month">
           <span className="stat-icon">
-            <TrendingUp size={18} />
+            <TrendingUp size={20} />
           </span>
           <div>
             <span className="stat-label">This Month's Sales</span>
@@ -54,9 +54,9 @@ export function Dashboard() {
             <span className="stat-sub">{summary.thisMonth.invoiceCount} invoice(s)</span>
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-low-stock">
           <span className="stat-icon">
-            <Receipt size={18} />
+            <Receipt size={20} />
           </span>
           <div>
             <span className="stat-label">Low Stock Items</span>
@@ -64,9 +64,9 @@ export function Dashboard() {
             <span className="stat-sub">across all warehouses</span>
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-damaged">
           <span className="stat-icon">
-            <PackageX size={18} />
+            <PackageX size={20} />
           </span>
           <div>
             <span className="stat-label">Damaged Stock</span>
