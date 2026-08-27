@@ -153,11 +153,12 @@ const bulkProductRowSchema = z.object({
   sellingPrice: z.number().nonnegative(),
   taxPercent: z.number().min(0).max(100).default(0),
   unit: z.string().default("pcs"),
-  initialStock: z.number().int().nonnegative().optional(),
+  initialStock: z
+    .array(z.object({ warehouseId: z.number().int(), quantity: z.number().int().nonnegative() }))
+    .optional(),
 });
 
 const bulkProductsSchema = z.object({
-  warehouseId: z.number().int().optional(),
   products: z.array(bulkProductRowSchema).min(1, "Add at least one product row"),
 });
 
@@ -213,14 +214,14 @@ export const createProductsBulk = asyncHandler(async (req: Request, res: Respons
           },
         });
 
-        if (data.warehouseId && item.initialStock) {
-          await tx.stock.create({
-            data: {
+        if (item.initialStock?.length) {
+          await tx.stock.createMany({
+            data: item.initialStock.map((s) => ({
               productId: created.id,
-              warehouseId: data.warehouseId,
-              quantity: item.initialStock,
+              warehouseId: s.warehouseId,
+              quantity: s.quantity,
               reorderLevel: 0,
-            },
+            })),
           });
         }
 

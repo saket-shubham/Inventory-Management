@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   PackageSearch,
   Plus,
   RotateCcw,
@@ -18,6 +20,7 @@ interface PurchaseLine {
   totalQty: string;
   costPrice: string;
   allocations: Record<number, string>;
+  autoFilled: boolean;
 }
 
 interface ReturnLine {
@@ -50,6 +53,8 @@ export function AdminPurchases() {
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [supplierReturns, setSupplierReturns] = useState<SupplierReturn[]>([]);
+  const [expandedPurchaseId, setExpandedPurchaseId] = useState<number | null>(null);
+  const [expandedReturnId, setExpandedReturnId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -98,10 +103,15 @@ export function AdminPurchases() {
     setSupplierSearch("");
   }
 
+  const defaultPurchaseWarehouse = warehouses.find((w) => w.name === "Warehouse") ?? warehouses[0];
+
   function addProductLine(product: Product) {
     setLines((prev) => {
       if (prev.some((l) => l.product.id === product.id)) return prev;
-      return [...prev, { product, totalQty: "", costPrice: String(product.sellingPrice), allocations: {} }];
+      return [
+        ...prev,
+        { product, totalQty: "", costPrice: String(product.sellingPrice), allocations: {}, autoFilled: true },
+      ];
     });
     setProductSearch("");
     setProductResults([]);
@@ -111,10 +121,25 @@ export function AdminPurchases() {
     setLines((prev) => prev.map((l) => (l.product.id === productId ? { ...l, ...patch } : l)));
   }
 
+  function updateLineTotal(productId: number, value: string) {
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.product.id !== productId) return l;
+        const updated: PurchaseLine = { ...l, totalQty: value };
+        if (l.autoFilled && defaultPurchaseWarehouse) {
+          updated.allocations = { ...updated.allocations, [defaultPurchaseWarehouse.id]: value };
+        }
+        return updated;
+      })
+    );
+  }
+
   function updateAllocation(productId: number, warehouseIdKey: number, value: string) {
     setLines((prev) =>
       prev.map((l) =>
-        l.product.id === productId ? { ...l, allocations: { ...l.allocations, [warehouseIdKey]: value } } : l
+        l.product.id === productId
+          ? { ...l, autoFilled: false, allocations: { ...l.allocations, [warehouseIdKey]: value } }
+          : l
       )
     );
   }
@@ -289,11 +314,6 @@ export function AdminPurchases() {
           <h4 style={{ marginTop: 18 }}>
             <PackageSearch size={15} /> Add products
           </h4>
-          <p className="help-text">
-            <PackageSearch size={14} /> Enter the <strong>total quantity you actually received</strong> per your
-            supplier's slip, then split it across warehouses below. The split must add up exactly to the total
-            before you can save — one Purchase Order, split across as many locations as you need.
-          </p>
           <input
             placeholder="Search product by name / SKU / barcode"
             value={productSearch}
@@ -341,7 +361,7 @@ export function AdminPurchases() {
                             min={0}
                             className="qty-input"
                             value={l.totalQty}
-                            onChange={(e) => updateLine(l.product.id, { totalQty: e.target.value })}
+                            onChange={(e) => updateLineTotal(l.product.id, e.target.value)}
                           />
                         </td>
                         <td>
@@ -542,7 +562,6 @@ export function AdminPurchases() {
           <tr>
             <th>PO #</th>
             <th>Date</th>
-            <th>Products (warehouse)</th>
             <th>Supplier</th>
             <th>Total</th>
           </tr>
@@ -550,19 +569,59 @@ export function AdminPurchases() {
         <tbody>
           {purchases.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
+              <td colSpan={4} className="muted">
                 No purchases recorded yet.
               </td>
             </tr>
           )}
           {purchases.map((p) => (
-            <tr key={p.id}>
-              <td>{p.purchaseNumber}</td>
-              <td>{new Date(p.createdAt).toLocaleDateString()}</td>
-              <td>{p.items.map((i) => `${i.product.name} ×${i.qty} @ ${i.warehouse.name}`).join(", ")}</td>
-              <td>{p.supplier?.name ?? "—"}</td>
-              <td>₹{Number(p.totalAmount).toFixed(2)}</td>
-            </tr>
+            <Fragment key={p.id}>
+              <tr>
+                <td>
+                  <button
+                    type="button"
+                    className="product-name-toggle"
+                    onClick={() => setExpandedPurchaseId(expandedPurchaseId === p.id ? null : p.id)}
+                  >
+                    {expandedPurchaseId === p.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {p.purchaseNumber}
+                  </button>
+                </td>
+                <td>{new Date(p.createdAt).toLocaleDateString()}</td>
+                <td>{p.supplier?.name ?? "—"}</td>
+                <td>₹{Number(p.totalAmount).toFixed(2)}</td>
+              </tr>
+              {expandedPurchaseId === p.id && (
+                <tr>
+                  <td colSpan={4} className="stock-expand-cell">
+                    <table className="stock-table">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Warehouse</th>
+                          <th>Qty</th>
+                          <th>Cost price</th>
+                          <th>Line total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.items.map((i) => (
+                          <tr key={i.id}>
+                            <td>
+                              {i.product.name} <span className="muted small">({i.product.sku})</span>
+                            </td>
+                            <td>{i.warehouse.name}</td>
+                            <td>{i.qty}</td>
+                            <td>₹{Number(i.costPrice).toFixed(2)}</td>
+                            <td>₹{Number(i.lineTotal).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -573,7 +632,6 @@ export function AdminPurchases() {
           <tr>
             <th>Return #</th>
             <th>Date</th>
-            <th>Products</th>
             <th>Supplier</th>
             <th>Warehouse</th>
           </tr>
@@ -581,19 +639,53 @@ export function AdminPurchases() {
         <tbody>
           {supplierReturns.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
+              <td colSpan={4} className="muted">
                 No supplier returns recorded yet.
               </td>
             </tr>
           )}
           {supplierReturns.map((r) => (
-            <tr key={r.id}>
-              <td>{r.returnNumber}</td>
-              <td>{new Date(r.createdAt).toLocaleDateString()}</td>
-              <td>{r.items.map((i) => `${i.product.name} (×${i.qty})`).join(", ")}</td>
-              <td>{r.supplier?.name ?? "—"}</td>
-              <td>{r.warehouse.name}</td>
-            </tr>
+            <Fragment key={r.id}>
+              <tr>
+                <td>
+                  <button
+                    type="button"
+                    className="product-name-toggle"
+                    onClick={() => setExpandedReturnId(expandedReturnId === r.id ? null : r.id)}
+                  >
+                    {expandedReturnId === r.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {r.returnNumber}
+                  </button>
+                </td>
+                <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+                <td>{r.supplier?.name ?? "—"}</td>
+                <td>{r.warehouse.name}</td>
+              </tr>
+              {expandedReturnId === r.id && (
+                <tr>
+                  <td colSpan={4} className="stock-expand-cell">
+                    <table className="stock-table">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {r.items.map((i) => (
+                          <tr key={i.id}>
+                            <td>
+                              {i.product.name} <span className="muted small">({i.product.sku})</span>
+                            </td>
+                            <td>{i.qty}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>

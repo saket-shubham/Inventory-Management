@@ -51,6 +51,13 @@
   --shadow-md: 0 10px 24px -12px rgba(76, 66, 150, 0.28);
   --shadow-lg: 0 24px 60px -16px rgba(63, 51, 130, 0.32);
 
+  /* Glass — frosted panels over the page's own gradient */
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 20px 50px -20px rgba(76, 58, 150, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(20px) saturate(160%);
+
   font-family: var(--font-sans);
 }
 
@@ -128,11 +135,22 @@ button.primary {
   padding: 11px 22px;
   font-size: 15px;
   background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+button.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.28) 0%, transparent 40%);
+  pointer-events: none;
 }
 
 button.primary:hover:not(:disabled) {
   filter: brightness(1.05);
+  box-shadow: 0 14px 30px -10px rgba(89, 64, 192, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 button.active {
@@ -226,9 +244,11 @@ label {
   align-items: center;
   gap: 28px;
   padding: 14px 28px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 8px 24px -16px rgba(76, 58, 150, 0.25);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -349,22 +369,30 @@ label {
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(900px 500px at 85% 0%, var(--brand-100) 0%, transparent 55%),
-    radial-gradient(700px 500px at 0% 100%, var(--brand-50) 0%, transparent 60%),
+    radial-gradient(900px 560px at 88% -6%, var(--brand-300) 0%, transparent 55%),
+    radial-gradient(760px 520px at 6% 8%, var(--tint-mint) 0%, transparent 55%),
+    radial-gradient(820px 560px at 12% 104%, var(--tint-peach) 0%, transparent 55%),
+    radial-gradient(700px 500px at 100% 100%, var(--brand-100) 0%, transparent 60%),
     var(--bg);
   padding: 24px;
+  position: relative;
+  overflow: hidden;
 }
 
 .auth-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--glass-shadow);
   padding: 40px 36px;
   width: 360px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  position: relative;
+  z-index: 1;
 }
 
 .auth-card .brand-mark {
@@ -422,18 +450,28 @@ label {
 
 .scan-section,
 .cart-section {
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
   padding: 24px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .scan-section {
-  background: linear-gradient(180deg, var(--tint-blue) 0%, var(--surface) 220px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tint-blue) 65%, var(--glass-bg)) 0%,
+    var(--glass-bg) 260px
+  );
 }
 
 .cart-section {
-  background: linear-gradient(180deg, var(--tint-peach) 0%, var(--surface) 220px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tint-peach) 65%, var(--glass-bg)) 0%,
+    var(--glass-bg) 260px
+  );
 }
 
 .section-header {
@@ -484,11 +522,18 @@ label {
 
 .product-card {
   margin-top: 18px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   padding: 18px;
-  background: linear-gradient(180deg, var(--brand-50) 0%, var(--surface) 18%);
-  animation: fade-in-up 0.2s ease;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand-100) 70%, var(--glass-bg-strong)) 0%,
+    var(--glass-bg-strong) 22%
+  );
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  animation: fade-in-up 0.25s ease;
 }
 
 @keyframes fade-in-up {
@@ -745,10 +790,16 @@ tr.current-warehouse:hover {
 
 .invoice-detail,
 .invoice-history {
-  background: linear-gradient(180deg, var(--tint-cream) 0%, var(--surface) 200px);
-  border: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tint-cream) 65%, var(--glass-bg)) 0%,
+    var(--glass-bg) 220px
+  );
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
   padding: 24px;
 }
 
@@ -775,8 +826,8 @@ tr.current-warehouse:hover {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 20px;
-  background: var(--tint-blue);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--tint-blue) 70%, rgba(255, 255, 255, 0.6));
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-sm);
   padding: 14px 16px;
   margin: 4px 0;
@@ -939,11 +990,19 @@ tr.current-warehouse:hover {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
   padding: 16px 18px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 56px -20px rgba(76, 58, 150, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .stat-card .stat-icon {
@@ -997,10 +1056,12 @@ tr.current-warehouse:hover {
 }
 
 .dashboard-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
   padding: 18px;
 }
 
@@ -1016,10 +1077,16 @@ tr.current-warehouse:hover {
 /* Admin */
 
 .admin-page {
-  background: linear-gradient(180deg, var(--tint-mint) 0%, var(--surface) 200px);
-  border: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tint-mint) 65%, var(--glass-bg)) 0%,
+    var(--glass-bg) 240px
+  );
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
   padding: 24px;
 }
 
@@ -1036,7 +1103,8 @@ tr.current-warehouse:hover {
 .admin-form {
   margin: 16px 0 26px;
   padding: 18px;
-  background: var(--surface-alt);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-md);
 }
 
