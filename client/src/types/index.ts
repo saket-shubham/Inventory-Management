@@ -1,10 +1,47 @@
-export type UserRole = "admin" | "cashier";
+export type UserRole = "admin" | "staff";
 
 export interface AuthUser {
   id: number;
   name: string;
   email: string;
   role: UserRole;
+}
+
+export interface StaffUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AuditLog {
+  id: number;
+  userId: number;
+  user: { id: number; name: string; email: string; role: UserRole };
+  action: string;
+  entityType: string;
+  entityId: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface StockTransfer {
+  id: number;
+  productId: number;
+  fromWarehouseId: number;
+  toWarehouseId: number;
+  qty: number;
+  fromPreviousQty: number;
+  fromNewQty: number;
+  toPreviousQty: number;
+  toNewQty: number;
+  performedById: number | null;
+  reason: string | null;
+  createdAt: string;
 }
 
 export interface Warehouse {

@@ -4,12 +4,12 @@ import {
   getSupplierReturn,
   listSupplierReturns,
 } from "../controllers/supplierReturns.controller";
-import { authenticate, authorize } from "../middleware/auth";
+import { authenticate } from "../middleware/auth";
 
 const router = Router();
 
-router.post("/", authenticate, authorize("admin"), createSupplierReturn);
-router.get("/", authenticate, authorize("admin"), listSupplierReturns);
-router.get("/:id", authenticate, authorize("admin"), getSupplierReturn);
+router.post("/", authenticate, createSupplierReturn);
+router.get("/", authenticate, listSupplierReturns);
+router.get("/:id", authenticate, getSupplierReturn);
 
 export default router;

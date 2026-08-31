@@ -31,7 +31,7 @@ async function main() {
   await prisma.user.createMany({
     data: [
       { name: "Admin User", email: "admin@example.com", passwordHash, role: "admin" },
-      { name: "Cashier User", email: "cashier@example.com", passwordHash, role: "cashier" },
+      { name: "Staff User", email: "staff@example.com", passwordHash, role: "staff" },
     ],
   });
 
@@ -90,7 +90,7 @@ async function main() {
   });
 
   console.log(`Seeded ${warehouses.length} warehouses, ${products.length} products, and 2 users.`);
-  console.log("Login with admin@example.com / password123 or cashier@example.com / password123");
+  console.log("Login with admin@example.com / password123 or staff@example.com / password123");
 }
 
 main()

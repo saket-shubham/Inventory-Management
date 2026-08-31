@@ -8,6 +8,9 @@ import { InvoiceHistory } from "./pages/InvoiceHistory";
 import { AdminProducts } from "./pages/AdminProducts";
 import { AdminStockAdjust } from "./pages/AdminStockAdjust";
 import { AdminPurchases } from "./pages/AdminPurchases";
+import { AdminStaff } from "./pages/AdminStaff";
+import { AdminStaffDetail } from "./pages/AdminStaffDetail";
+import { AdminAuditLogs } from "./pages/AdminAuditLogs";
 import { Dashboard } from "./pages/Dashboard";
 import { CartProvider } from "./context/CartContext";
 
@@ -27,35 +30,33 @@ function App() {
         <Route path="/" element={<Billing />} />
         <Route path="/invoices" element={<InvoiceHistory />} />
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
+        {/* Open to any logged-in user (admin or staff) — only Staff Management
+            and Audit Logs below stay admin-only. */}
+        <Route path="/admin/dashboard" element={<Dashboard />} />
+        <Route path="/admin/products" element={<AdminProducts />} />
+        <Route path="/admin/stock" element={<AdminStockAdjust />} />
+        <Route path="/admin/purchases" element={<AdminPurchases />} />
         <Route
-          path="/admin/dashboard"
+          path="/admin/staff"
           element={
             <ProtectedRoute roles={["admin"]}>
-              <Dashboard />
+              <AdminStaff />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/products"
+          path="/admin/staff/:id"
           element={
             <ProtectedRoute roles={["admin"]}>
-              <AdminProducts />
+              <AdminStaffDetail />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/stock"
+          path="/admin/audit-logs"
           element={
             <ProtectedRoute roles={["admin"]}>
-              <AdminStockAdjust />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/purchases"
-          element={
-            <ProtectedRoute roles={["admin"]}>
-              <AdminPurchases />
+              <AdminAuditLogs />
             </ProtectedRoute>
           }
         />

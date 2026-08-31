@@ -9,17 +9,27 @@ datasource db {
 
 enum UserRole {
   admin
-  cashier
+  staff
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole @default(cashier)
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(staff)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  stockLedgerEntries StockLedger[]    @relation("StockLedgerPerformedBy")
+  stockTransfers     StockTransfer[]  @relation("StockTransferPerformedBy")
+  invoices           Invoice[]        @relation("InvoiceCreatedBy")
+  purchases          Purchase[]       @relation("PurchaseCreatedBy")
+  returns            Return[]         @relation("ReturnCreatedBy")
+  supplierReturns    SupplierReturn[] @relation("SupplierReturnCreatedBy")
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -32,11 +42,13 @@ model Warehouse {
   phone         String?
   isActive      Boolean  @default(true) @map("is_active")
 
-  stock           Stock[]
-  stockLedger     StockLedger[]
-  invoices        Invoice[]
-  purchaseItems   PurchaseItem[]
-  supplierReturns SupplierReturn[]
+  stock              Stock[]
+  stockLedger        StockLedger[]
+  invoices           Invoice[]
+  purchaseItems      PurchaseItem[]
+  supplierReturns    SupplierReturn[]
+  stockTransfersFrom StockTransfer[]  @relation("StockTransferFrom")
+  stockTransfersTo   StockTransfer[]  @relation("StockTransferTo")
 
   @@map("warehouses")
 }
@@ -63,6 +75,7 @@ model Product {
   purchaseItems       PurchaseItem[]
   returnItems         ReturnItem[]
   supplierReturnItems SupplierReturnItem[]
+  stockTransfers      StockTransfer[]
 
   @@index([barcode])
   @@map("products")
@@ -89,6 +102,7 @@ enum LedgerReferenceType {
   purchase
   adjustment
   return
+  transfer
 }
 
 model StockLedger {
@@ -96,15 +110,59 @@ model StockLedger {
   productId     Int                 @map("product_id")
   warehouseId   Int                 @map("warehouse_id")
   changeQty     Int                 @map("change_qty")
+  previousQty   Int                 @map("previous_qty")
   balanceQty    Int                 @map("balance_qty")
   referenceType LedgerReferenceType @map("reference_type")
   referenceId   Int?                @map("reference_id")
+  performedById Int?                @map("performed_by_id")
+  reason        String?
   createdAt     DateTime            @default(now()) @map("created_at")
 
-  product   Product   @relation(fields: [productId], references: [id])
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  performedBy User?     @relation("StockLedgerPerformedBy", fields: [performedById], references: [id])
 
   @@map("stock_ledger")
+}
+
+model StockTransfer {
+  id              Int      @id @default(autoincrement())
+  productId       Int      @map("product_id")
+  fromWarehouseId Int      @map("from_warehouse_id")
+  toWarehouseId   Int      @map("to_warehouse_id")
+  qty             Int
+  fromPreviousQty Int      @map("from_previous_qty")
+  fromNewQty      Int      @map("from_new_qty")
+  toPreviousQty   Int      @map("to_previous_qty")
+  toNewQty        Int      @map("to_new_qty")
+  performedById   Int?     @map("performed_by_id")
+  reason          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  product       Product   @relation(fields: [productId], references: [id])
+  fromWarehouse Warehouse @relation("StockTransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse @relation("StockTransferTo", fields: [toWarehouseId], references: [id])
+  performedBy   User?     @relation("StockTransferPerformedBy", fields: [performedById], references: [id])
+
+  @@map("stock_transfers")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   Int?     @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 
 model Customer {
@@ -143,10 +201,12 @@ model Invoice {
   grandTotal    Decimal       @map("grand_total") @db.Decimal(12, 2)
   paymentMode   PaymentMode   @map("payment_mode")
   status        InvoiceStatus @default(paid)
+  createdById   Int?          @map("created_by_id")
   createdAt     DateTime      @default(now()) @map("created_at")
 
   customer  Customer?     @relation(fields: [customerId], references: [id])
   warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  createdBy User?         @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
   items     InvoiceItem[]
   returns   Return[]
 
@@ -179,14 +239,16 @@ enum ReturnReason {
 }
 
 model Return {
-  id            Int      @id @default(autoincrement())
-  returnNumber  String   @unique @map("return_number")
-  invoiceId     Int      @map("invoice_id")
-  totalRefund   Decimal  @map("total_refund") @db.Decimal(12, 2)
-  createdAt     DateTime @default(now()) @map("created_at")
+  id           Int      @id @default(autoincrement())
+  returnNumber String   @unique @map("return_number")
+  invoiceId    Int      @map("invoice_id")
+  totalRefund  Decimal  @map("total_refund") @db.Decimal(12, 2)
+  createdById  Int?     @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  invoice Invoice      @relation(fields: [invoiceId], references: [id])
-  items   ReturnItem[]
+  invoice   Invoice      @relation(fields: [invoiceId], references: [id])
+  createdBy User?        @relation("ReturnCreatedBy", fields: [createdById], references: [id])
+  items     ReturnItem[]
 
   @@map("returns")
 }
@@ -221,14 +283,16 @@ model Supplier {
 }
 
 model Purchase {
-  id              Int      @id @default(autoincrement())
-  purchaseNumber  String   @unique @map("purchase_number")
-  supplierId      Int?     @map("supplier_id")
-  totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             Int      @id @default(autoincrement())
+  purchaseNumber String   @unique @map("purchase_number")
+  supplierId     Int?     @map("supplier_id")
+  totalAmount    Decimal  @map("total_amount") @db.Decimal(12, 2)
+  createdById    Int?     @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  supplier Supplier?      @relation(fields: [supplierId], references: [id])
-  items    PurchaseItem[]
+  supplier  Supplier?      @relation(fields: [supplierId], references: [id])
+  createdBy User?          @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  items     PurchaseItem[]
 
   @@map("purchases")
 }
@@ -254,10 +318,12 @@ model SupplierReturn {
   returnNumber String   @unique @map("return_number")
   supplierId   Int?     @map("supplier_id")
   warehouseId  Int      @map("warehouse_id")
+  createdById  Int?     @map("created_by_id")
   createdAt    DateTime @default(now()) @map("created_at")
 
   supplier  Supplier?            @relation(fields: [supplierId], references: [id])
   warehouse Warehouse            @relation(fields: [warehouseId], references: [id])
+  createdBy User?                @relation("SupplierReturnCreatedBy", fields: [createdById], references: [id])
   items     SupplierReturnItem[]
 
   @@map("supplier_returns")

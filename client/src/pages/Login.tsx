@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { ScanLine, TriangleAlert } from "lucide-react";
+import { Eye, EyeOff, ScanLine, TriangleAlert } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { apiErrorMessage } from "../api/client";
 
@@ -9,6 +9,7 @@ export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("password123");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -46,7 +47,24 @@ export function Login() {
         </label>
         <label>
           Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <div className="password-field">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </label>
         {error && (
           <p className="error-text">
@@ -57,7 +75,7 @@ export function Login() {
           {submitting ? "Signing in..." : "Sign in"}
         </button>
         <p className="demo-hint">
-          Demo accounts: <strong>admin@example.com</strong> or <strong>cashier@example.com</strong>
+          Demo accounts: <strong>admin@example.com</strong> or <strong>staff@example.com</strong>
           <br />
           Password: <strong>password123</strong>
         </p>

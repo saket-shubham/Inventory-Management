@@ -2,13 +2,11 @@ import { Fragment, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Ban, Download, PlusCircle, RotateCcw, TriangleAlert } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
-import { useAuth } from "../context/AuthContext";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Invoice, ReturnReason } from "../types";
 
 export function InvoiceDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -105,7 +103,7 @@ export function InvoiceDetail() {
           <Link to="/" className="button-link">
             <PlusCircle size={15} /> New sale
           </Link>
-          {user?.role === "admin" && invoice.status === "paid" && !confirmingCancel && (
+          {invoice.status === "paid" && !confirmingCancel && (
             <button type="button" className="danger-button" onClick={() => setConfirmingCancel(true)}>
               <Ban size={15} /> Cancel invoice
             </button>
@@ -154,7 +152,7 @@ export function InvoiceDetail() {
         <tbody>
           {invoice.items.map((item) => {
             const returnable = item.qty - item.returnedQty;
-            const canReturn = user?.role === "admin" && invoice.status === "paid" && returnable > 0;
+            const canReturn = invoice.status === "paid" && returnable > 0;
             return (
               <Fragment key={item.id}>
                 <tr>

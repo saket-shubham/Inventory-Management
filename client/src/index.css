@@ -95,16 +95,18 @@
 [data-mode="dark"] {
   color-scheme: dark;
 
-  --bg: #0b1020;
-  --surface: #141a2e;
-  --surface-alt: #1b2238;
-  --surface-sunken: #10162a;
-  --border: #2a3350;
-  --border-strong: #3a4568;
+  /* True neutral grayscale — no hue bias. Brand color (violet) is kept only on
+     buttons/links/badges, never on the page chrome itself. */
+  --bg: #0a0a0a;
+  --surface: #171717;
+  --surface-alt: #212121;
+  --surface-sunken: #121212;
+  --border: #333333;
+  --border-strong: #474747;
 
-  --text: #eef1f8;
-  --text-soft: #c3c9dc;
-  --muted: #8992ae;
+  --text: #f2f2f2;
+  --text-soft: #cfcfcf;
+  --muted: #9a9a9a;
 
   --success-bg: #0f2b22;
   --success-border: #1c4a38;
@@ -120,49 +122,17 @@
   --tint-peach: #2c1f18;
   --tint-cream: #2a2314;
 
-  --glass-bg: rgba(20, 26, 46, 0.72);
-  --glass-bg-strong: rgba(24, 31, 53, 0.88);
+  --glass-bg: rgba(23, 23, 23, 0.72);
+  --glass-bg-strong: rgba(28, 28, 28, 0.88);
   --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(var(--brand-rgb), 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   --chip-bg: rgba(255, 255, 255, 0.06);
   --chip-bg-strong: rgba(255, 255, 255, 0.09);
   --border-soft: rgba(255, 255, 255, 0.09);
   --row-hover: rgba(255, 255, 255, 0.045);
-  --disabled-bg: #2a3350;
-  --disabled-text: #5c6688;
-}
-
-/* ============ ACCENT THEMES ============
-   Independent of mode — redefines only the brand scale + its RGB triple. */
-[data-accent="blue"] {
-  --brand-rgb: 14, 165, 233;
-  --brand-50: #f0f9ff;
-  --brand-100: #e0f2fe;
-  --brand-200: #bae6fd;
-  --brand-300: #7dd3fc;
-  --brand-400: #38bdf8;
-  --brand-500: #0ea5e9;
-  --brand-600: #0284c7;
-  --brand-700: #0369a1;
-  --brand-800: #075985;
-  --brand-900: #0c4a6e;
-  --brand-mark-gradient: linear-gradient(135deg, #38bdf8 0%, #6366f1 50%, #0284c7 100%);
-}
-
-[data-accent="green"] {
-  --brand-rgb: 16, 185, 129;
-  --brand-50: #ecfdf5;
-  --brand-100: #d1fae5;
-  --brand-200: #a7f3d0;
-  --brand-300: #6ee7b7;
-  --brand-400: #34d399;
-  --brand-500: #10b981;
-  --brand-600: #059669;
-  --brand-700: #047857;
-  --brand-800: #065f46;
-  --brand-900: #064e3b;
-  --brand-mark-gradient: linear-gradient(135deg, #34d399 0%, #14b8a6 50%, #059669 100%);
+  --disabled-bg: #333333;
+  --disabled-text: #7a7a7a;
 }
 
 * {
@@ -182,6 +152,14 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark mode: drop the colorful background blobs entirely for a flat, neutral
+   black backdrop — only a faint white vignette for depth, no hue at all. */
+[data-mode="dark"] body {
+  background:
+    radial-gradient(1200px 650px at 50% -10%, rgba(255, 255, 255, 0.04) 0%, transparent 60%),
+    var(--bg);
 }
 
 /* Custom Scrollbar */
@@ -331,6 +309,42 @@ input::placeholder {
   color: var(--muted);
 }
 
+.password-field {
+  position: relative;
+  display: flex;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 38px;
+}
+
+button.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+button.password-toggle:hover:not(:disabled) {
+  color: var(--brand-600);
+  background: var(--chip-bg);
+  transform: translateY(-50%);
+  box-shadow: none;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -427,6 +441,162 @@ label {
   transform: rotate(-5deg) scale(1.05);
 }
 
+.admin-menu {
+  position: relative;
+}
+
+.admin-menu-trigger {
+  /* Reset the global button styling so this still reads as the plain brand mark. */
+  background: none;
+  color: var(--text);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.admin-menu-trigger:hover:not(:disabled) {
+  background: var(--chip-bg);
+  transform: none;
+  box-shadow: none;
+}
+
+.admin-menu-chevron {
+  color: var(--muted);
+  transition: transform 0.18s ease;
+  margin-left: -2px;
+}
+
+.admin-menu-chevron.open {
+  transform: rotate(180deg);
+}
+
+.admin-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  min-width: 240px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 60;
+}
+
+.admin-menu-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+}
+
+.admin-menu-user-name {
+  margin: 0 0 3px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.admin-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.admin-menu-item:hover {
+  background: var(--chip-bg);
+  color: var(--brand-700);
+}
+
+.admin-menu-item.active {
+  background: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-600) 100%);
+  color: white;
+  box-shadow: 0 4px 12px -2px rgba(var(--brand-rgb), 0.4);
+}
+
+button.admin-menu-item {
+  /* Reset the global button styling — these are plain menu rows, not CTAs. */
+  width: 100%;
+  background: none;
+  border: none;
+  box-shadow: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.admin-menu-item:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+button.admin-menu-item.danger-link {
+  color: var(--danger);
+}
+
+button.admin-menu-item.danger-link:hover {
+  background: var(--danger-bg);
+  color: var(--danger-dark);
+}
+
+.themes-chevron {
+  margin-left: auto;
+}
+
+.themes-submenu {
+  padding: 10px 10px 4px;
+}
+
+.themes-submenu .theme-switcher {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.user-menu-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 0;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-400), var(--brand-600));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(var(--brand-rgb), 0.4);
+  flex-shrink: 0;
+}
+
+.role-badge {
+  text-transform: uppercase;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--brand-700);
+  background: var(--brand-100);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
 .app-header nav {
   display: flex;
   align-items: center;
@@ -463,95 +633,20 @@ label {
   box-shadow: 0 4px 12px -2px rgba(var(--brand-rgb), 0.5);
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  margin-left: auto;
-}
-
-.user-info .user-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--chip-bg-strong);
-  padding: 4px 12px 4px 5px;
-  border-radius: 999px;
-  font-weight: 600;
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.user-info .avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand-400), var(--brand-600));
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 800;
-  box-shadow: 0 2px 6px rgba(var(--brand-rgb), 0.4);
-}
-
-.user-info .role-badge {
-  text-transform: uppercase;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  color: var(--brand-700);
-  background: var(--brand-100);
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-
-.user-info button.link-button {
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
-.user-info button.link-button:hover {
-  color: var(--danger);
-  background: var(--danger-bg);
-}
-
 .theme-switcher {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 4px 8px;
   background: var(--chip-bg);
   border: 1px solid var(--border-soft);
   border-radius: 999px;
 }
 
-.accent-swatches {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.accent-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  padding: 0;
-  cursor: pointer;
-  box-shadow: 0 0 0 1px var(--border);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.accent-swatch:hover {
-  transform: scale(1.12);
-}
-
-.accent-swatch.active {
-  border-color: var(--surface);
-  box-shadow: 0 0 0 2px var(--text);
+.theme-switcher-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
 }
 
 .mode-switch-btn {
@@ -562,16 +657,16 @@ label {
   height: 26px;
   border-radius: 50%;
   border: none;
-  background: var(--chip-bg-strong);
-  color: var(--text-soft);
+  /* Knob is always the opposite of the page: black on light mode, white on dark mode. */
+  background: var(--text);
+  color: var(--surface);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .mode-switch-btn:hover {
-  background: var(--brand-100);
-  color: var(--brand-700);
   transform: rotate(-12deg);
+  opacity: 0.85;
 }
 
 .app-main {
@@ -610,6 +705,12 @@ label {
   padding: 24px;
   position: relative;
   overflow: hidden;
+}
+
+[data-mode="dark"] .auth-page {
+  background:
+    radial-gradient(900px 560px at 50% -10%, rgba(255, 255, 255, 0.04) 0%, transparent 60%),
+    var(--bg);
 }
 
 .auth-card {

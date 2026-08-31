@@ -16,10 +16,12 @@ export function AdminStockAdjust() {
   const [warehouseId, setWarehouseId] = useState<number | "">("");
   const [changeQty, setChangeQty] = useState("");
   const [reorderLevel, setReorderLevel] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
 
   const [fromWarehouseId, setFromWarehouseId] = useState<number | "">("");
   const [toWarehouseId, setToWarehouseId] = useState<number | "">("");
   const [transferQty, setTransferQty] = useState("");
+  const [transferReason, setTransferReason] = useState("");
 
   const [damageWarehouseId, setDamageWarehouseId] = useState<number | "">("");
   const [damageQty, setDamageQty] = useState("");
@@ -77,9 +79,11 @@ export function AdminStockAdjust() {
         warehouseId,
         changeQty: Number(changeQty),
         ...(reorderLevel.trim() !== "" ? { reorderLevel: Number(reorderLevel) } : {}),
+        ...(adjustReason.trim() !== "" ? { reason: adjustReason.trim() } : {}),
       });
       setMessage("Stock adjusted.");
       setChangeQty("");
+      setAdjustReason("");
       refreshStock();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -99,10 +103,16 @@ export function AdminStockAdjust() {
     setError(null);
     setMessage(null);
     try {
-      await api.post("/stock/adjust", { productId: selectedProduct.id, warehouseId: fromWarehouseId, changeQty: -qty });
-      await api.post("/stock/adjust", { productId: selectedProduct.id, warehouseId: toWarehouseId, changeQty: qty });
+      await api.post("/stock/transfer", {
+        productId: selectedProduct.id,
+        fromWarehouseId,
+        toWarehouseId,
+        qty,
+        ...(transferReason.trim() !== "" ? { reason: transferReason.trim() } : {}),
+      });
       setMessage("Stock transferred.");
       setTransferQty("");
+      setTransferReason("");
       refreshStock();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -229,6 +239,15 @@ export function AdminStockAdjust() {
                 New reorder level (optional)
                 <input type="number" min={0} value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} />
               </label>
+              <label>
+                Reason (optional)
+                <input
+                  type="text"
+                  placeholder="e.g. Physical stock count"
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                />
+              </label>
               <button type="button" className="primary" disabled={submitting} onClick={handleAdjust}>
                 Apply adjustment
               </button>
@@ -260,6 +279,15 @@ export function AdminStockAdjust() {
               <label>
                 Quantity
                 <input type="number" min={1} value={transferQty} onChange={(e) => setTransferQty(e.target.value)} />
+              </label>
+              <label>
+                Reason (optional)
+                <input
+                  type="text"
+                  placeholder="e.g. Rebalancing showroom stock"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                />
               </label>
               <button type="button" className="primary" disabled={submitting} onClick={handleTransfer}>
                 Transfer
