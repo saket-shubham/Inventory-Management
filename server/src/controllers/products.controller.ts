@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
+import { recordAudit } from "../services/auditLog";
 
 export const lookupByBarcode = asyncHandler(async (req: Request, res: Response) => {
   const barcode = String(req.query.barcode ?? "").trim();
@@ -106,6 +107,7 @@ const createProductSchema = z.object({
 
 export const createProduct = asyncHandler(async (req: Request, res: Response) => {
   const data = createProductSchema.parse(req.body);
+  const actor = req.user!;
 
   const existing = await prisma.product.findUnique({ where: { barcode: data.barcode } });
   if (existing) throw new ApiError(409, "A product with this barcode already exists");
@@ -137,6 +139,14 @@ export const createProduct = asyncHandler(async (req: Request, res: Response) =>
       });
     }
 
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "PRODUCT_CREATED",
+      entityType: "Product",
+      entityId: created.id,
+      metadata: { name: created.name, sku: created.sku, barcode: created.barcode },
+    });
+
     return created;
   });
 
@@ -164,6 +174,7 @@ const bulkProductsSchema = z.object({
 
 export const createProductsBulk = asyncHandler(async (req: Request, res: Response) => {
   const data = bulkProductsSchema.parse(req.body);
+  const actor = req.user!;
 
   const existingCount = await prisma.product.count();
   let nextSkuSeq = existingCount + 1;
@@ -234,6 +245,18 @@ export const createProductsBulk = asyncHandler(async (req: Request, res: Respons
     }
   }
 
+  const succeeded = results.filter((r) => r.success);
+  if (succeeded.length > 0) {
+    await prisma.auditLog.create({
+      data: {
+        userId: actor.id,
+        action: "PRODUCT_CREATED",
+        entityType: "Product",
+        metadata: { bulk: true, count: succeeded.length },
+      },
+    });
+  }
+
   res.json({ results });
 });
 
@@ -252,16 +275,39 @@ const updateProductSchema = z.object({
 export const updateProduct = asyncHandler(async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const data = updateProductSchema.parse(req.body);
+  const actor = req.user!;
 
   const existing = await prisma.product.findUnique({ where: { id } });
   if (!existing) throw new ApiError(404, "Product not found");
 
-  const product = await prisma.product.update({
-    where: { id },
-    data: {
-      ...data,
-      ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
-    },
+  const product = await prisma.$transaction(async (tx) => {
+    const updated = await tx.product.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
+      },
+    });
+
+    if (data.isActive !== undefined && data.isActive !== existing.isActive) {
+      await recordAudit(tx, {
+        userId: actor.id,
+        action: data.isActive ? "PRODUCT_ACTIVATED" : "PRODUCT_DEACTIVATED",
+        entityType: "Product",
+        entityId: id,
+        metadata: { name: updated.name, sku: updated.sku },
+      });
+    } else {
+      await recordAudit(tx, {
+        userId: actor.id,
+        action: "PRODUCT_UPDATED",
+        entityType: "Product",
+        entityId: id,
+        metadata: { name: updated.name, sku: updated.sku, changes: Object.keys(data) },
+      });
+    }
+
+    return updated;
   });
 
   res.json(product);

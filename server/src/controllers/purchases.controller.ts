@@ -5,6 +5,7 @@ import { prisma } from "../config/prisma";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generatePurchaseNumber } from "../services/purchaseNumber";
+import { recordAudit } from "../services/auditLog";
 
 const createPurchaseSchema = z.object({
   supplierId: z.number().int().optional(),
@@ -22,6 +23,7 @@ const createPurchaseSchema = z.object({
 
 export const createPurchase = asyncHandler(async (req: Request, res: Response) => {
   const data = createPurchaseSchema.parse(req.body);
+  const actor = req.user!;
 
   const purchase = await prisma.$transaction(async (tx) => {
     const productIds = [...new Set(data.items.map((i) => i.productId))];
@@ -54,6 +56,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
         purchaseNumber,
         supplierId: data.supplierId,
         totalAmount,
+        createdById: actor.id,
         items: { create: itemsData },
       },
       include: { items: { include: { product: true, warehouse: true } }, supplier: true },
@@ -63,7 +66,8 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
       const existing = await tx.stock.findUnique({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: item.warehouseId } },
       });
-      const newQty = (existing?.quantity ?? 0) + item.qty;
+      const previousQty = existing?.quantity ?? 0;
+      const newQty = previousQty + item.qty;
 
       await tx.stock.upsert({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: item.warehouseId } },
@@ -76,12 +80,32 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
           productId: item.productId,
           warehouseId: item.warehouseId,
           changeQty: item.qty,
+          previousQty,
           balanceQty: newQty,
           referenceType: "purchase",
           referenceId: created.id,
+          performedById: actor.id,
         },
       });
     }
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "STOCK_IN",
+      entityType: "Purchase",
+      entityId: created.id,
+      metadata: {
+        purchaseNumber: created.purchaseNumber,
+        totalAmount: totalAmount.toString(),
+        items: created.items.map((i) => ({
+          productId: i.productId,
+          productName: i.product.name,
+          warehouseId: i.warehouseId,
+          warehouseName: i.warehouse.name,
+          qty: i.qty,
+        })),
+      },
+    });
 
     return created;
   });

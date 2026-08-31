@@ -7,6 +7,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { generateInvoiceNumber } from "../services/invoiceNumber";
 import { generateReturnNumber } from "../services/returnNumber";
 import { streamInvoicePdf } from "../services/pdfService";
+import { recordAudit } from "../services/auditLog";
 
 const createInvoiceSchema = z.object({
   warehouseId: z.number().int(),
@@ -27,6 +28,7 @@ const createInvoiceSchema = z.object({
 
 export const createInvoice = asyncHandler(async (req: Request, res: Response) => {
   const data = createInvoiceSchema.parse(req.body);
+  const actor = req.user!;
 
   const invoice = await prisma.$transaction(async (tx) => {
     const productIds = data.items.map((i) => i.productId);
@@ -99,6 +101,7 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
         grandTotal,
         paymentMode: data.paymentMode,
         status: "paid",
+        createdById: actor.id,
         items: { create: itemsData },
       },
       include: { items: true, customer: true, warehouse: true },
@@ -106,7 +109,8 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
 
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
-      const newQty = stock.quantity - item.qty;
+      const previousQty = stock.quantity;
+      const newQty = previousQty - item.qty;
       await tx.stock.update({
         where: { id: stock.id },
         data: { quantity: newQty },
@@ -116,12 +120,22 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
           productId: item.productId,
           warehouseId: data.warehouseId,
           changeQty: -item.qty,
+          previousQty,
           balanceQty: newQty,
           referenceType: "invoice",
           referenceId: created.id,
+          performedById: actor.id,
         },
       });
     }
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "SALE",
+      entityType: "Invoice",
+      entityId: created.id,
+      metadata: { invoiceNumber: created.invoiceNumber, warehouseId: data.warehouseId, grandTotal: grandTotal.toString(), itemCount: data.items.length },
+    });
 
     return created;
   });
@@ -131,6 +145,7 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
 
 export const cancelInvoice = asyncHandler(async (req: Request, res: Response) => {
   const id = Number(req.params.id);
+  const actor = req.user!;
 
   const updated = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findUnique({ where: { id }, include: { items: true } });
@@ -143,7 +158,8 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
       const stock = await tx.stock.findUnique({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
       });
-      const newQty = (stock?.quantity ?? 0) + item.qty;
+      const previousQty = stock?.quantity ?? 0;
+      const newQty = previousQty + item.qty;
 
       await tx.stock.upsert({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
@@ -156,18 +172,31 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
           productId: item.productId,
           warehouseId: invoice.warehouseId,
           changeQty: item.qty,
+          previousQty,
           balanceQty: newQty,
           referenceType: "invoice",
           referenceId: invoice.id,
+          performedById: actor.id,
+          reason: "Invoice cancelled",
         },
       });
     }
 
-    return tx.invoice.update({
+    const result = await tx.invoice.update({
       where: { id },
       data: { status: "cancelled" },
       include: { items: { include: { product: true } }, customer: true, warehouse: true },
     });
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "INVOICE_CANCELLED",
+      entityType: "Invoice",
+      entityId: invoice.id,
+      metadata: { invoiceNumber: invoice.invoiceNumber, warehouseId: invoice.warehouseId },
+    });
+
+    return result;
   });
 
   res.json(updated);
@@ -188,6 +217,7 @@ const createReturnSchema = z.object({
 export const createReturn = asyncHandler(async (req: Request, res: Response) => {
   const invoiceId = Number(req.params.id);
   const data = createReturnSchema.parse(req.body);
+  const actor = req.user!;
 
   const created = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findUnique({
@@ -231,6 +261,7 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
         returnNumber,
         invoiceId: invoice.id,
         totalRefund,
+        createdById: actor.id,
         items: { create: itemsData },
       },
       include: { items: { include: { product: true } } },
@@ -249,7 +280,8 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
       });
 
       if (reqItem.reason === "normal") {
-        const newQty = (stock?.quantity ?? 0) + reqItem.qty;
+        const previousQty = stock?.quantity ?? 0;
+        const newQty = previousQty + reqItem.qty;
         await tx.stock.upsert({
           where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
           update: { quantity: newQty },
@@ -265,9 +297,12 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
             productId: invoiceItem.productId,
             warehouseId: invoice.warehouseId,
             changeQty: reqItem.qty,
+            previousQty,
             balanceQty: newQty,
             referenceType: "return",
             referenceId: createdReturn.id,
+            performedById: actor.id,
+            reason: `Customer return (${reqItem.reason})`,
           },
         });
       } else {
@@ -287,6 +322,19 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
         // ledger tracks sellable-quantity movements only).
       }
     }
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "RETURN",
+      entityType: "Return",
+      entityId: createdReturn.id,
+      metadata: {
+        returnNumber: createdReturn.returnNumber,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        totalRefund: totalRefund.toString(),
+      },
+    });
 
     return createdReturn;
   });

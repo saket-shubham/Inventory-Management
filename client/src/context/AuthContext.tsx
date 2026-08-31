@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "../api/client";
+import { useTheme } from "./ThemeContext";
 import type { AuthUser } from "../types";
 
 interface AuthContextValue {
@@ -14,6 +15,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const { resetToLight } = useTheme();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -34,11 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.post("/auth/login", { email, password });
     localStorage.setItem("token", res.data.token);
     setUser(res.data.user);
+    resetToLight();
   }
 
   function logout() {
     localStorage.removeItem("token");
     setUser(null);
+    resetToLight();
   }
 
   return <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>;
