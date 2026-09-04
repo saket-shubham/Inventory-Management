@@ -214,7 +214,7 @@ export function AdminStockAdjust() {
               Transfer between warehouses
             </button>
             <button type="button" className={mode === "damage" ? "active" : ""} onClick={() => setMode("damage")}>
-              Mark Damaged
+              Mark Damaged (Showroom)
             </button>
           </div>
 
@@ -296,10 +296,16 @@ export function AdminStockAdjust() {
           ) : (
             <div>
               <p className="help-text">
-                <PackageX size={14} /> Use this when you find a broken/defective piece in your own stock (not a
-                customer return). It moves units from <strong>sellable</strong> stock into a{" "}
-                <strong>damaged</strong> holding area — they can no longer be sold. To send them back to the
-                supplier afterwards, go to{" "}
+                <PackageX size={14} /> Use this for <strong>Damage on Showroom</strong> — a broken/defective piece
+                found in your own stock after it reached the showroom (handling, display, accident — not a customer
+                return, and not damage found while receiving a purchase). It moves units from{" "}
+                <strong>sellable</strong> stock into the damaged holding area — they can no longer be sold. For
+                units damaged in transit from a supplier, record them directly on the{" "}
+                <Link to="/admin/purchases" className="inline-link">
+                  Purchases
+                </Link>{" "}
+                form instead, under "Damaged (transit)" — they should never enter sellable stock in the first place.
+                To send any damaged stock back to a supplier, go to{" "}
                 <Link to="/admin/purchases" className="inline-link">
                   Purchases → Return to Supplier
                 </Link>

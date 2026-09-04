@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
+import { ProductImageInput } from "../components/ProductImageInput";
 import type { Product, StockByWarehouse, Warehouse } from "../types";
 
 const emptyForm = {
@@ -27,6 +28,7 @@ const emptyForm = {
   taxPercent: "0",
   unit: "pcs",
   imageUrl: "",
+  imageData: "",
 };
 
 interface BulkRow {
@@ -40,6 +42,8 @@ interface BulkRow {
   sellingPrice: string;
   taxPercent: string;
   unit: string;
+  imageUrl: string;
+  imageData: string;
   stockTotal: string;
   stockAllocations: Record<number, string>;
   stockAutoFilled: boolean;
@@ -58,6 +62,8 @@ function makeEmptyBulkRow(id: number): BulkRow {
     sellingPrice: "",
     taxPercent: "0",
     unit: "pcs",
+    imageUrl: "",
+    imageData: "",
     stockTotal: "",
     stockAllocations: {},
     stockAutoFilled: true,
@@ -171,6 +177,7 @@ export function AdminProducts() {
       taxPercent: String(product.taxPercent),
       unit: product.unit,
       imageUrl: product.imageUrl ?? "",
+      imageData: product.imageData ?? "",
     });
     setError(null);
     setSuccess(null);
@@ -210,6 +217,7 @@ export function AdminProducts() {
           taxPercent: Number(form.taxPercent),
           unit: form.unit,
           imageUrl: form.imageUrl || undefined,
+          imageData: form.imageData || undefined,
         });
         setSuccess(`Product "${form.name}" updated.`);
         setEditingId(null);
@@ -226,6 +234,7 @@ export function AdminProducts() {
           taxPercent: Number(form.taxPercent),
           unit: form.unit,
           imageUrl: form.imageUrl || undefined,
+          imageData: form.imageData || undefined,
           initialStock: Object.entries(stockAllocations)
             .filter(([, qty]) => qty.trim() !== "" && Number(qty) > 0)
             .map(([warehouseId, qty]) => ({
@@ -327,6 +336,8 @@ export function AdminProducts() {
           sellingPrice: Number(r.sellingPrice),
           taxPercent: Number(r.taxPercent || 0),
           unit: r.unit || "pcs",
+          imageUrl: r.imageUrl || undefined,
+          imageData: r.imageData || undefined,
           initialStock: Object.entries(r.stockAllocations)
             .filter(([, qty]) => qty && Number(qty) > 0)
             .map(([warehouseId, qty]) => ({ warehouseId: Number(warehouseId), quantity: Number(qty) })),
@@ -457,11 +468,15 @@ export function AdminProducts() {
             Unit
             <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
           </label>
-          <label>
-            Image URL
-            <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
-          </label>
         </div>
+
+        <h4>Product image</h4>
+        <ProductImageInput
+          imageUrl={form.imageUrl}
+          imageData={form.imageData}
+          onChangeUrl={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+          onChangeData={(data) => setForm((f) => ({ ...f, imageData: data }))}
+        />
 
         {!editingId && (
           <>
@@ -564,6 +579,7 @@ export function AdminProducts() {
                 <th>Price *</th>
                 <th>Tax %</th>
                 <th>Unit</th>
+                <th>Image</th>
                 <th>Total stock</th>
                 {warehouses.map((w) => (
                   <th key={w.id}>{w.name}</th>
@@ -627,6 +643,15 @@ export function AdminProducts() {
                     </td>
                     <td>
                       <input className="qty-input" value={row.unit} onChange={(e) => updateBulkRow(row.id, { unit: e.target.value })} />
+                    </td>
+                    <td>
+                      <ProductImageInput
+                        compact
+                        imageUrl={row.imageUrl}
+                        imageData={row.imageData}
+                        onChangeUrl={(url) => updateBulkRow(row.id, { imageUrl: url })}
+                        onChangeData={(data) => updateBulkRow(row.id, { imageData: data })}
+                      />
                     </td>
                     <td>
                       <input

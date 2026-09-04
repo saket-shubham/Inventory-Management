@@ -14,6 +14,9 @@ import {
   ClipboardList,
   ChevronDown,
   Palette,
+  Tag,
+  PauseCircle,
+  Contact,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -93,6 +96,9 @@ function BrandMenu() {
               <NavLink to="/admin/audit-logs" className="admin-menu-item">
                 <ClipboardList size={15} /> Audit Logs
               </NavLink>
+              <NavLink to="/admin/coupons" className="admin-menu-item">
+                <Tag size={15} /> Discount Coupons
+              </NavLink>
             </>
           )}
 
@@ -127,6 +133,12 @@ export function Layout() {
           </NavLink>
           <NavLink to="/invoices">
             <History size={15} /> Invoice History
+          </NavLink>
+          <NavLink to="/hold">
+            <PauseCircle size={15} /> Hold
+          </NavLink>
+          <NavLink to="/customers">
+            <Contact size={15} /> Customers
           </NavLink>
           <NavLink to="/admin/dashboard">
             <LayoutDashboard size={15} /> Dashboard

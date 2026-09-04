@@ -18,6 +18,7 @@ import type { DamagedStockRow, Product, Purchase, Supplier, SupplierReturn, Ware
 interface PurchaseLine {
   product: Product;
   totalQty: string;
+  damagedQty: string;
   costPrice: string;
   allocations: Record<number, string>;
   autoFilled: boolean;
@@ -110,7 +111,14 @@ export function AdminPurchases() {
       if (prev.some((l) => l.product.id === product.id)) return prev;
       return [
         ...prev,
-        { product, totalQty: "", costPrice: String(product.sellingPrice), allocations: {}, autoFilled: true },
+        {
+          product,
+          totalQty: "",
+          damagedQty: "0",
+          costPrice: String(product.sellingPrice),
+          allocations: {},
+          autoFilled: true,
+        },
       ];
     });
     setProductSearch("");
@@ -165,16 +173,31 @@ export function AdminPurchases() {
     setError(null);
     setSuccess(null);
     try {
-      const items = lines.flatMap((l) =>
-        warehouses
+      const items = lines.flatMap((l) => {
+        // Transit-damaged units for this line are attributed to whichever
+        // warehouse got the largest share of the good units — the line's
+        // primary receiving location.
+        const damagedQty = Number(l.damagedQty) || 0;
+        let primaryWarehouseId: number | null = null;
+        let primaryQty = -1;
+        for (const w of warehouses) {
+          const qty = Number(l.allocations[w.id]) || 0;
+          if (qty > primaryQty) {
+            primaryQty = qty;
+            primaryWarehouseId = w.id;
+          }
+        }
+
+        return warehouses
           .map((w) => ({
             productId: l.product.id,
             warehouseId: w.id,
             qty: Number(l.allocations[w.id]) || 0,
+            damagedQty: damagedQty > 0 && w.id === primaryWarehouseId ? damagedQty : 0,
             costPrice: Number(l.costPrice) || 0,
           }))
-          .filter((i) => i.qty > 0)
-      );
+          .filter((i) => i.qty > 0 || i.damagedQty > 0);
+      });
 
       const res = await api.post<Purchase>("/purchases", {
         supplierId: selectedSupplier?.id,
@@ -314,6 +337,12 @@ export function AdminPurchases() {
           <h4 style={{ marginTop: 18 }}>
             <PackageSearch size={15} /> Add products
           </h4>
+          <p className="help-text">
+            <strong>Total received (good)</strong> is what goes into normal/sellable stock — unchanged from before.
+            If some units arrived already damaged from the supplier, add them separately under{" "}
+            <strong>Damaged (transit)</strong> — they're recorded straight into Damaged Products and never touch
+            sellable stock.
+          </p>
           <input
             placeholder="Search product by name / SKU / barcode"
             value={productSearch}
@@ -337,7 +366,8 @@ export function AdminPurchases() {
                 <thead>
                   <tr>
                     <th>Product</th>
-                    <th>Total received</th>
+                    <th>Total received (good)</th>
+                    <th>Damaged (transit)</th>
                     <th>Cost price</th>
                     {warehouses.map((w) => (
                       <th key={w.id}>{w.name}</th>
@@ -362,6 +392,15 @@ export function AdminPurchases() {
                             className="qty-input"
                             value={l.totalQty}
                             onChange={(e) => updateLineTotal(l.product.id, e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            className="qty-input"
+                            value={l.damagedQty}
+                            onChange={(e) => updateLine(l.product.id, { damagedQty: e.target.value })}
                           />
                         </td>
                         <td>
@@ -600,6 +639,7 @@ export function AdminPurchases() {
                           <th>Product</th>
                           <th>Warehouse</th>
                           <th>Qty</th>
+                          <th>Damaged (transit)</th>
                           <th>Cost price</th>
                           <th>Line total</th>
                         </tr>
@@ -612,6 +652,7 @@ export function AdminPurchases() {
                             </td>
                             <td>{i.warehouse.name}</td>
                             <td>{i.qty}</td>
+                            <td>{i.damagedQty > 0 ? <span className="out-of-stock-badge">{i.damagedQty}</span> : "—"}</td>
                             <td>₹{Number(i.costPrice).toFixed(2)}</td>
                             <td>₹{Number(i.lineTotal).toFixed(2)}</td>
                           </tr>

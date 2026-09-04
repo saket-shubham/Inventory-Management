@@ -15,6 +15,10 @@ const createPurchaseSchema = z.object({
         productId: z.number().int(),
         warehouseId: z.number().int(),
         qty: z.number().int().positive(),
+        // Units of this line that arrived already damaged (Damage on
+        // Transit) — kept separate from `qty`, and never added to normal
+        // stock, only to the damaged bucket.
+        damagedQty: z.number().int().nonnegative().default(0),
         costPrice: z.number().nonnegative(),
       })
     )
@@ -38,12 +42,15 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
 
     let totalAmount = new Prisma.Decimal(0);
     const itemsData = data.items.map((item) => {
+      // Cost accounting is unchanged — the bill is based on qty (good units)
+      // exactly as before; damagedQty is tracked for inventory purposes only.
       const lineTotal = new Prisma.Decimal(item.costPrice).mul(item.qty);
       totalAmount = totalAmount.add(lineTotal);
       return {
         productId: item.productId,
         warehouseId: item.warehouseId,
         qty: item.qty,
+        damagedQty: item.damagedQty,
         costPrice: item.costPrice,
         lineTotal,
       };
@@ -68,13 +75,28 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
       });
       const previousQty = existing?.quantity ?? 0;
       const newQty = previousQty + item.qty;
+      const previousDamagedQty = existing?.damagedQuantity ?? 0;
+      const previousDamagedTransitQty = existing?.damagedQuantityTransit ?? 0;
+      const newDamagedQty = previousDamagedQty + item.damagedQty;
+      const newDamagedTransitQty = previousDamagedTransitQty + item.damagedQty;
 
       await tx.stock.upsert({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: item.warehouseId } },
-        update: { quantity: newQty },
-        create: { productId: item.productId, warehouseId: item.warehouseId, quantity: newQty, reorderLevel: 0 },
+        update: { quantity: newQty, damagedQuantity: newDamagedQty, damagedQuantityTransit: newDamagedTransitQty },
+        create: {
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+          quantity: newQty,
+          damagedQuantity: newDamagedQty,
+          damagedQuantityTransit: newDamagedTransitQty,
+          reorderLevel: 0,
+        },
       });
 
+      // Only the good units ever move through the sellable-stock ledger —
+      // damaged-on-arrival units never entered `quantity`, so there's nothing
+      // to log there (mirrors how mark-damaged and defective returns already
+      // treat the damaged bucket: tracked via Stock fields, no ledger row).
       await tx.stockLedger.create({
         data: {
           productId: item.productId,
@@ -85,6 +107,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
           referenceType: "purchase",
           referenceId: created.id,
           performedById: actor.id,
+          ...(item.damagedQty > 0 ? { reason: `${item.damagedQty} unit(s) received damaged (transit)` } : {}),
         },
       });
     }
@@ -103,6 +126,7 @@ export const createPurchase = asyncHandler(async (req: Request, res: Response) =
           warehouseId: i.warehouseId,
           warehouseName: i.warehouse.name,
           qty: i.qty,
+          damagedQty: i.damagedQty,
         })),
       },
     });

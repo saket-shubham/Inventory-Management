@@ -55,9 +55,14 @@ export const createSupplierReturn = asyncHandler(async (req: Request, res: Respo
 
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
+      // Reduce the transit-sourced subset by the same amount (clamped at 0)
+      // so it can never end up larger than the new total — a return doesn't
+      // ask which source the returned units came from, so transit-sourced
+      // units are treated as returned first.
+      const newDamagedQuantityTransit = Math.max(0, stock.damagedQuantityTransit - item.qty);
       await tx.stock.update({
         where: { id: stock.id },
-        data: { damagedQuantity: stock.damagedQuantity - item.qty },
+        data: { damagedQuantity: stock.damagedQuantity - item.qty, damagedQuantityTransit: newDamagedQuantityTransit },
       });
     }
 
