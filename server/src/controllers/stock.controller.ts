@@ -260,6 +260,7 @@ export const markDamaged = asyncHandler(async (req: Request, res: Response) => {
         qty: data.qty,
         previousQty,
         newQty,
+        damageSource: "showroom",
       },
     });
 
@@ -290,21 +291,62 @@ export const listLowStock = asyncHandler(async (_req: Request, res: Response) =>
   res.json(lowStock);
 });
 
-export const listDamagedStock = asyncHandler(async (_req: Request, res: Response) => {
+// Damage Source is derived, not stored per-row: Stock.damagedQuantityTransit
+// is the Damage on Transit subset of the existing Stock.damagedQuantity
+// total; the remainder is Damage on Showroom (mark-damaged, defective
+// customer/hold returns — everything that happened once the unit was already
+// in showroom/shop inventory). One Stock row can therefore surface as up to
+// two rows here, one per non-zero source — matching the existing damaged
+// stock list, just split out instead of collapsed into a single number.
+export const listDamagedStock = asyncHandler(async (req: Request, res: Response) => {
+  const sourceFilter = req.query.source === "transit" || req.query.source === "showroom" ? req.query.source : undefined;
+
   const rows = await prisma.stock.findMany({
     where: { damagedQuantity: { gt: 0 } },
     include: { product: true, warehouse: true },
-    orderBy: { damagedQuantity: "desc" },
+    orderBy: { updatedAt: "desc" },
   });
 
-  res.json(
-    rows.map((s) => ({
-      productId: s.productId,
-      productName: s.product.name,
-      sku: s.product.sku,
-      warehouseId: s.warehouseId,
-      warehouseName: s.warehouse.name,
-      damagedQuantity: s.damagedQuantity,
-    }))
-  );
+  const result: Array<{
+    productId: number;
+    productName: string;
+    sku: string;
+    warehouseId: number;
+    warehouseName: string;
+    damagedQuantity: number;
+    damageSource: "transit" | "showroom";
+    updatedAt: Date;
+  }> = [];
+
+  for (const s of rows) {
+    const transitQty = s.damagedQuantityTransit;
+    const showroomQty = s.damagedQuantity - s.damagedQuantityTransit;
+
+    if (transitQty > 0 && (!sourceFilter || sourceFilter === "transit")) {
+      result.push({
+        productId: s.productId,
+        productName: s.product.name,
+        sku: s.product.sku,
+        warehouseId: s.warehouseId,
+        warehouseName: s.warehouse.name,
+        damagedQuantity: transitQty,
+        damageSource: "transit",
+        updatedAt: s.updatedAt,
+      });
+    }
+    if (showroomQty > 0 && (!sourceFilter || sourceFilter === "showroom")) {
+      result.push({
+        productId: s.productId,
+        productName: s.product.name,
+        sku: s.product.sku,
+        warehouseId: s.warehouseId,
+        warehouseName: s.warehouse.name,
+        damagedQuantity: showroomQty,
+        damageSource: "showroom",
+        updatedAt: s.updatedAt,
+      });
+    }
+  }
+
+  res.json(result);
 });

@@ -6,6 +6,7 @@ import {
   downloadInvoicePdf,
   getInvoice,
   listInvoices,
+  sendInvoiceEmailNow,
 } from "../controllers/invoices.controller";
 import { authenticate } from "../middleware/auth";
 
@@ -17,5 +18,6 @@ router.get("/:id", authenticate, getInvoice);
 router.get("/:id/pdf", authenticate, downloadInvoicePdf);
 router.post("/:id/cancel", authenticate, cancelInvoice);
 router.post("/:id/return", authenticate, createReturn);
+router.post("/:id/send-email", authenticate, sendInvoiceEmailNow);
 
 export default router;

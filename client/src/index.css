@@ -283,6 +283,19 @@ button.danger-button:hover:not(:disabled) {
   box-shadow: 0 4px 12px -2px rgba(244, 63, 94, 0.35);
 }
 
+button.hold-button {
+  background: var(--warning-bg);
+  color: var(--warning-dark);
+  box-shadow: none;
+  border: 1px solid var(--warning-border);
+}
+
+button.hold-button:hover:not(:disabled) {
+  background: var(--warning);
+  color: white;
+  box-shadow: 0 4px 12px -2px rgba(245, 158, 11, 0.35);
+}
+
 /* Inputs & Form Controls */
 
 input,
@@ -923,6 +936,97 @@ button.admin-menu-item.danger-link:hover {
   color: var(--text);
 }
 
+/* Product Image Input (URL or camera-captured, single form + bulk rows) */
+
+.product-image-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.product-image-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.product-image-preview img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.product-image-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.product-image-controls input {
+  width: 200px;
+}
+
+.product-image-input.compact {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.product-image-input.compact .product-image-preview {
+  flex-direction: row;
+}
+
+.product-image-input.compact .product-image-preview img {
+  width: 32px;
+  height: 32px;
+}
+
+.product-image-input.compact .product-image-controls {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.product-image-input.compact .product-image-controls input {
+  width: 110px;
+}
+
+.photo-capture {
+  margin: 8px 0;
+  padding: 14px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 2px dashed var(--brand-300);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.photo-capture-viewport {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #000;
+}
+
+.photo-capture-viewport video {
+  width: 100%;
+  display: block;
+}
+
+.photo-capture-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .price-row {
   display: flex;
   align-items: center;
@@ -1126,6 +1230,47 @@ tr.current-warehouse:hover {
   margin-top: 4px;
 }
 
+.coupon-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.coupon-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  font-weight: 800;
+}
+
+.coupon-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coupon-input-group input {
+  width: 160px;
+}
+
+.coupon-input-group button {
+  padding: 7px 12px;
+  font-size: 12.5px;
+}
+
+.coupon-applied {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success-dark);
+  font-weight: 700;
+}
+
 .payment-mode {
   flex-direction: row;
   align-items: center;
@@ -1307,6 +1452,18 @@ tr.current-warehouse:hover {
   background: var(--info-bg);
   color: var(--info-dark);
   border-color: var(--info-border);
+}
+
+.status-hold-active {
+  background: var(--info-bg);
+  color: var(--info-dark);
+  border-color: var(--info-border);
+}
+
+.status-hold-returned {
+  background: var(--warning-bg);
+  color: var(--warning-dark);
+  border-color: var(--warning-border);
 }
 
 .invoice-number-link {

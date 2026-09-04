@@ -11,6 +11,8 @@ import purchaseRoutes from "./purchases.routes";
 import supplierReturnRoutes from "./supplierReturns.routes";
 import userRoutes from "./users.routes";
 import auditLogRoutes from "./auditLogs.routes";
+import couponRoutes from "./coupons.routes";
+import holdInvoiceRoutes from "./holdInvoices.routes";
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use("/purchases", purchaseRoutes);
 router.use("/supplier-returns", supplierReturnRoutes);
 router.use("/users", userRoutes);
 router.use("/audit-logs", auditLogRoutes);
+router.use("/coupons", couponRoutes);
+router.use("/hold-invoices", holdInvoiceRoutes);
 
 export default router;

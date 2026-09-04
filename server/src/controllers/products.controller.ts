@@ -5,6 +5,24 @@ import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { recordAudit } from "../services/auditLog";
 
+const MAX_IMAGE_BYTES = 50 * 1024;
+
+// A data URI's decoded byte size is ~3/4 of its base64 payload length.
+function base64ByteSize(dataUri: string): number {
+  const base64 = dataUri.slice(dataUri.indexOf(",") + 1);
+  return Math.ceil((base64.length * 3) / 4);
+}
+
+// Camera-captured/uploaded images arrive as a compressed base64 data URI —
+// validated here so a request can never persist something that isn't really
+// an image, or that snuck past the client-side 50KB compression.
+const imageDataSchema = z
+  .string()
+  .regex(/^data:image\/(jpeg|jpg|png|webp);base64,/, "Image must be a JPEG, PNG, or WebP data URI")
+  .refine((val) => base64ByteSize(val) <= MAX_IMAGE_BYTES, `Image must be ${MAX_IMAGE_BYTES / 1024}KB or smaller`)
+  .optional()
+  .or(z.literal(""));
+
 export const lookupByBarcode = asyncHandler(async (req: Request, res: Response) => {
   const barcode = String(req.query.barcode ?? "").trim();
   if (!barcode) throw new ApiError(400, "barcode query param is required");
@@ -33,6 +51,7 @@ export const lookupByBarcode = asyncHandler(async (req: Request, res: Response) 
     sellingPrice: product.sellingPrice,
     taxPercent: product.taxPercent,
     imageUrl: product.imageUrl,
+    imageData: product.imageData,
     unit: product.unit,
     stockByWarehouse: product.stock.map((s) => ({
       warehouseId: s.warehouseId,
@@ -99,6 +118,7 @@ const createProductSchema = z.object({
   sellingPrice: z.number().nonnegative(),
   taxPercent: z.number().min(0).max(100).default(0),
   imageUrl: z.string().url().optional().or(z.literal("")),
+  imageData: imageDataSchema,
   unit: z.string().default("pcs"),
   initialStock: z
     .array(z.object({ warehouseId: z.number().int(), quantity: z.number().int().nonnegative(), reorderLevel: z.number().int().nonnegative().default(0) }))
@@ -124,6 +144,7 @@ export const createProduct = asyncHandler(async (req: Request, res: Response) =>
         sellingPrice: data.sellingPrice,
         taxPercent: data.taxPercent,
         imageUrl: data.imageUrl || null,
+        imageData: data.imageData || null,
         unit: data.unit,
       },
     });
@@ -162,6 +183,8 @@ const bulkProductRowSchema = z.object({
   mrp: z.number().nonnegative(),
   sellingPrice: z.number().nonnegative(),
   taxPercent: z.number().min(0).max(100).default(0),
+  imageUrl: z.string().url().optional().or(z.literal("")),
+  imageData: imageDataSchema,
   unit: z.string().default("pcs"),
   initialStock: z
     .array(z.object({ warehouseId: z.number().int(), quantity: z.number().int().nonnegative() }))
@@ -221,6 +244,8 @@ export const createProductsBulk = asyncHandler(async (req: Request, res: Respons
             mrp: item.mrp,
             sellingPrice: item.sellingPrice,
             taxPercent: item.taxPercent,
+            imageUrl: item.imageUrl || null,
+            imageData: item.imageData || null,
             unit: item.unit,
           },
         });
@@ -268,6 +293,7 @@ const updateProductSchema = z.object({
   sellingPrice: z.number().nonnegative().optional(),
   taxPercent: z.number().min(0).max(100).optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
+  imageData: imageDataSchema,
   unit: z.string().optional(),
   isActive: z.boolean().optional(),
 });
@@ -286,6 +312,7 @@ export const updateProduct = asyncHandler(async (req: Request, res: Response) =>
       data: {
         ...data,
         ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
+        ...(data.imageData !== undefined ? { imageData: data.imageData || null } : {}),
       },
     });
 

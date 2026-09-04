@@ -17,7 +17,11 @@ export type AuditAction =
   | "STAFF_CREATED"
   | "STAFF_UPDATED"
   | "STAFF_ACTIVATED"
-  | "STAFF_DEACTIVATED";
+  | "STAFF_DEACTIVATED"
+  | "HOLD_CREATED"
+  | "HOLD_COMPLETED"
+  | "HOLD_RETURNED"
+  | "HOLD_EXPIRED";
 
 export type AuditEntityType =
   | "Product"
@@ -27,7 +31,8 @@ export type AuditEntityType =
   | "Purchase"
   | "Return"
   | "SupplierReturn"
-  | "User";
+  | "User"
+  | "HoldInvoice";
 
 interface RecordAuditInput {
   userId: number;

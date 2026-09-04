@@ -74,6 +74,7 @@ export interface Product {
   sellingPrice: string;
   taxPercent: string;
   imageUrl: string | null;
+  imageData?: string | null;
   unit: string;
   isActive?: boolean;
   stockByWarehouse?: StockByWarehouse[];
@@ -86,6 +87,8 @@ export interface Customer {
   email: string | null;
   gstNumber: string | null;
   address: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type PaymentMode = "cash" | "card" | "upi";
@@ -142,13 +145,54 @@ export interface Invoice {
   warehouse: Warehouse;
   subtotal: string;
   taxAmount: string;
-  discount: string;
+  couponCode: string | null;
+  couponDiscountPercent: string | null;
+  couponDiscountAmount: string | null;
   grandTotal: string;
   paymentMode: PaymentMode;
   status: "draft" | "paid" | "cancelled";
   createdAt: string;
   items: InvoiceItem[];
   returns: Return[];
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  discountPercent: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type HoldStatus = "active" | "completed" | "returned" | "expired";
+
+export interface HoldInvoiceItem {
+  id: number;
+  holdInvoiceId: number;
+  productId: number;
+  product: { id: number; name: string; sku: string; barcode: string };
+  qty: number;
+  mrp: string;
+  price: string;
+  taxPercent: string;
+  keptQty: number;
+  returnedNormalQty: number;
+  returnedDamagedQty: number;
+}
+
+export interface HoldInvoice {
+  id: number;
+  holdNumber: string;
+  customerId: number | null;
+  customer: Customer | null;
+  warehouseId: number;
+  warehouse: Warehouse;
+  status: HoldStatus;
+  expiresAt: string;
+  processedAt: string | null;
+  createdAt: string;
+  items: HoldInvoiceItem[];
+  finalInvoice: { id: number; invoiceNumber: string; grandTotal: string } | null;
 }
 
 export interface LowStockRow {
@@ -161,6 +205,8 @@ export interface LowStockRow {
   reorderLevel: number;
 }
 
+export type DamageSource = "transit" | "showroom";
+
 export interface DamagedStockRow {
   productId: number;
   productName: string;
@@ -168,6 +214,8 @@ export interface DamagedStockRow {
   warehouseId: number;
   warehouseName: string;
   damagedQuantity: number;
+  damageSource: DamageSource;
+  updatedAt: string;
 }
 
 export interface SalesSummary {
@@ -192,6 +240,7 @@ export interface PurchaseItem {
   warehouseId: number;
   warehouse: { id: number; name: string };
   qty: number;
+  damagedQty: number;
   costPrice: string;
   lineTotal: string;
 }

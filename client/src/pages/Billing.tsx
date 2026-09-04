@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, ScanLine, ShoppingCart, TriangleAlert } from "lucide-react";
+import { Camera, CheckCircle2, PauseCircle, ScanLine, ShoppingCart, Tag, TriangleAlert, X } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import { useCart } from "../context/CartContext";
 import { ScanInput } from "../components/ScanInput";
@@ -24,11 +24,19 @@ export function Billing() {
   const [newCustomerMode, setNewCustomerMode] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
-  const [discount, setDiscount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [holding, setHolding] = useState(false);
+  const [holdError, setHoldError] = useState<string | null>(null);
+
+  const [couponCodeInput, setCouponCodeInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
 
   useEffect(() => {
     api.get("/warehouses").then((res) => {
@@ -69,24 +77,74 @@ export function Billing() {
     setScannedProduct(null);
   }
 
-  async function createNewCustomer() {
-    const res = await api.post<Customer>("/customers", { name: newCustomerName, phone: newCustomerPhone });
+  async function createNewCustomer(): Promise<Customer> {
+    // Upserts by phone on the server — this is the Customer Database's entry
+    // point, so an existing customer's record gets updated in place instead
+    // of a duplicate being created.
+    const res = await api.post<Customer>("/customers", {
+      name: newCustomerName,
+      phone: newCustomerPhone || undefined,
+      email: newCustomerEmail || undefined,
+    });
     setSelectedCustomer(res.data);
     setNewCustomerMode(false);
     setCustomerSearch("");
     setCustomerResults([]);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerEmail("");
+    return res.data;
   }
+
+  // If the cashier typed a name/phone into the new-customer form but never
+  // clicked "Save customer", generating the invoice/hold anyway shouldn't
+  // silently throw that typed info away — save it now, right before billing.
+  async function resolveCustomerId(): Promise<number | undefined> {
+    if (selectedCustomer) return selectedCustomer.id;
+    if (newCustomerMode && newCustomerName.trim()) {
+      const created = await createNewCustomer();
+      return created.id;
+    }
+    return undefined;
+  }
+
+  async function applyCoupon() {
+    const code = couponCodeInput.trim();
+    if (!code) return;
+    setCouponChecking(true);
+    setCouponError(null);
+    try {
+      const res = await api.get<{ code: string; discountPercent: string }>("/coupons/validate", {
+        params: { code },
+      });
+      setAppliedCoupon({ code: res.data.code, discountPercent: Number(res.data.discountPercent) });
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(apiErrorMessage(err));
+    } finally {
+      setCouponChecking(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponCodeInput("");
+    setCouponError(null);
+  }
+
+  const couponDiscountAmount = appliedCoupon ? (cart.subtotal * appliedCoupon.discountPercent) / 100 : 0;
 
   async function handleGenerateInvoice() {
     if (!cart.warehouseId || cart.lines.length === 0) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const customerId = await resolveCustomerId();
       const res = await api.post("/invoices", {
         warehouseId: cart.warehouseId,
-        customerId: selectedCustomer?.id,
+        customerId,
         paymentMode,
-        discount,
+        ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
         items: cart.lines.map((l) => ({
           productId: l.product.id,
           qty: l.qty,
@@ -96,7 +154,7 @@ export function Billing() {
       });
       cart.clear();
       setSelectedCustomer(null);
-      setDiscount(0);
+      removeCoupon();
       navigate(`/invoices/${res.data.id}`);
     } catch (err) {
       setSubmitError(apiErrorMessage(err));
@@ -105,7 +163,29 @@ export function Billing() {
     }
   }
 
-  const grandTotal = cart.grandTotal(discount);
+  async function handleHold() {
+    if (!cart.warehouseId || cart.lines.length === 0) return;
+    setHolding(true);
+    setHoldError(null);
+    try {
+      const customerId = await resolveCustomerId();
+      const res = await api.post("/hold-invoices", {
+        warehouseId: cart.warehouseId,
+        customerId,
+        items: cart.lines.map((l) => ({ productId: l.product.id, qty: l.qty })),
+      });
+      cart.clear();
+      setSelectedCustomer(null);
+      removeCoupon();
+      navigate(`/hold/${res.data.id}`);
+    } catch (err) {
+      setHoldError(apiErrorMessage(err));
+    } finally {
+      setHolding(false);
+    }
+  }
+
+  const grandTotal = cart.grandTotal(couponDiscountAmount);
 
   return (
     <div className="billing-page">
@@ -174,9 +254,15 @@ export function Billing() {
                 onChange={(e) => setNewCustomerName(e.target.value)}
               />
               <input
-                placeholder="Phone"
+                placeholder="Phone (WhatsApp)"
                 value={newCustomerPhone}
                 onChange={(e) => setNewCustomerPhone(e.target.value)}
+              />
+              <input
+                type="email"
+                placeholder="Email (optional)"
+                value={newCustomerEmail}
+                onChange={(e) => setNewCustomerEmail(e.target.value)}
               />
               <button type="button" disabled={!newCustomerName.trim()} onClick={createNewCustomer}>
                 Save customer
@@ -218,6 +304,43 @@ export function Billing() {
           )}
         </div>
 
+        <div className="coupon-section">
+          <h3>
+            <Tag size={14} /> Coupon code
+          </h3>
+          {appliedCoupon ? (
+            <span className="coupon-applied">
+              <CheckCircle2 size={14} /> {appliedCoupon.code} — {appliedCoupon.discountPercent}% (−₹
+              {couponDiscountAmount.toFixed(2)})
+              <button type="button" className="link-button" onClick={removeCoupon}>
+                <X size={13} /> Remove
+              </button>
+            </span>
+          ) : (
+            <span className="coupon-input-group">
+              <input
+                placeholder="e.g. DISCOUNT10"
+                value={couponCodeInput}
+                onChange={(e) => setCouponCodeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyCoupon();
+                  }
+                }}
+              />
+              <button type="button" disabled={!couponCodeInput.trim() || couponChecking} onClick={applyCoupon}>
+                {couponChecking ? "Checking..." : "Apply"}
+              </button>
+            </span>
+          )}
+          {couponError && (
+            <p className="error-text">
+              <TriangleAlert size={14} /> {couponError}
+            </p>
+          )}
+        </div>
+
         <div className="invoice-totals">
           <div>
             <span>Subtotal</span>
@@ -227,16 +350,12 @@ export function Billing() {
             <span>Tax</span>
             <span>₹{cart.taxAmount.toFixed(2)}</span>
           </div>
-          <div>
-            <span>Discount</span>
-            <input
-              type="number"
-              min={0}
-              value={discount}
-              onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
-              className="qty-input"
-            />
-          </div>
+          {appliedCoupon && (
+            <div>
+              <span>Coupon ({appliedCoupon.code})</span>
+              <span>−₹{couponDiscountAmount.toFixed(2)}</span>
+            </div>
+          )}
           <div className="grand-total">
             <span>Grand Total</span>
             <span>₹{grandTotal.toFixed(2)}</span>
@@ -253,14 +372,30 @@ export function Billing() {
         </label>
 
         {submitError && <p className="error-text">{submitError}</p>}
-        <button
-          type="button"
-          className="primary"
-          disabled={cart.lines.length === 0 || submitting}
-          onClick={handleGenerateInvoice}
-        >
-          {submitting ? "Generating..." : "Generate Invoice"}
-        </button>
+        {holdError && (
+          <p className="error-text">
+            <TriangleAlert size={14} /> {holdError}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            type="button"
+            className="primary"
+            disabled={cart.lines.length === 0 || submitting || holding}
+            onClick={handleGenerateInvoice}
+          >
+            {submitting ? "Generating..." : "Generate Invoice"}
+          </button>
+          <button
+            type="button"
+            className="hold-button"
+            disabled={cart.lines.length === 0 || submitting || holding}
+            onClick={handleHold}
+            title="Move these items to Hold instead of billing them now"
+          >
+            <PauseCircle size={15} /> {holding ? "Holding..." : "Hold"}
+          </button>
+        </div>
       </section>
     </div>
   );

@@ -24,4 +24,14 @@ export const env = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  // Optional — invoice emailing is a no-op (logged, not sent) until these are
+  // set. No fallback/required() here: an unconfigured SMTP block must not
+  // crash the server or block billing.
+  smtp: {
+    host: process.env.SMTP_HOST ?? "",
+    port: Number(process.env.SMTP_PORT ?? 587),
+    user: process.env.SMTP_USER ?? "",
+    pass: process.env.SMTP_PASS ?? "",
+    from: process.env.SMTP_FROM ?? "",
+  },
 };
