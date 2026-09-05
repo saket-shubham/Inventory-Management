@@ -1,10 +1,47 @@
-export type UserRole = "admin" | "cashier";
+export type UserRole = "admin" | "staff";
 
 export interface AuthUser {
   id: number;
   name: string;
   email: string;
   role: UserRole;
+}
+
+export interface StaffUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AuditLog {
+  id: number;
+  userId: number;
+  user: { id: number; name: string; email: string; role: UserRole };
+  action: string;
+  entityType: string;
+  entityId: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface StockTransfer {
+  id: number;
+  productId: number;
+  fromWarehouseId: number;
+  toWarehouseId: number;
+  qty: number;
+  fromPreviousQty: number;
+  fromNewQty: number;
+  toPreviousQty: number;
+  toNewQty: number;
+  performedById: number | null;
+  reason: string | null;
+  createdAt: string;
 }
 
 export interface Warehouse {
@@ -37,6 +74,7 @@ export interface Product {
   sellingPrice: string;
   taxPercent: string;
   imageUrl: string | null;
+  imageData?: string | null;
   unit: string;
   isActive?: boolean;
   stockByWarehouse?: StockByWarehouse[];
@@ -49,6 +87,8 @@ export interface Customer {
   email: string | null;
   gstNumber: string | null;
   address: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type PaymentMode = "cash" | "card" | "upi";
@@ -105,13 +145,56 @@ export interface Invoice {
   warehouse: Warehouse;
   subtotal: string;
   taxAmount: string;
-  discount: string;
+  couponCode: string | null;
+  couponDiscountPercent: string | null;
+  couponDiscountAmount: string | null;
   grandTotal: string;
   paymentMode: PaymentMode;
   status: "draft" | "paid" | "cancelled";
   createdAt: string;
   items: InvoiceItem[];
   returns: Return[];
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  discountPercent: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type HoldStatus = "active" | "completed" | "returned" | "expired";
+
+export interface HoldInvoiceItem {
+  id: number;
+  holdInvoiceId: number;
+  productId: number;
+  product: { id: number; name: string; sku: string; barcode: string };
+  qty: number;
+  mrp: string;
+  price: string;
+  taxPercent: string;
+  // Filled in only when the hold is processed (or auto-expired) — must always
+  // sum to `qty` once the hold is no longer "active".
+  keptQty: number;
+  returnedNormalQty: number;
+  returnedDamagedQty: number;
+}
+
+export interface HoldInvoice {
+  id: number;
+  holdNumber: string;
+  customerId: number | null;
+  customer: Customer | null;
+  warehouseId: number;
+  warehouse: Warehouse;
+  status: HoldStatus;
+  expiresAt: string;
+  processedAt: string | null;
+  createdAt: string;
+  items: HoldInvoiceItem[];
+  finalInvoice: { id: number; invoiceNumber: string; grandTotal: string } | null;
 }
 
 export interface LowStockRow {
@@ -124,6 +207,8 @@ export interface LowStockRow {
   reorderLevel: number;
 }
 
+export type DamageSource = "transit" | "showroom";
+
 export interface DamagedStockRow {
   productId: number;
   productName: string;
@@ -131,6 +216,8 @@ export interface DamagedStockRow {
   warehouseId: number;
   warehouseName: string;
   damagedQuantity: number;
+  damageSource: DamageSource;
+  updatedAt: string;
 }
 
 export interface SalesSummary {
@@ -152,7 +239,10 @@ export interface PurchaseItem {
   id: number;
   productId: number;
   product: { id: number; name: string; sku: string };
+  warehouseId: number;
+  warehouse: { id: number; name: string };
   qty: number;
+  damagedQty: number;
   costPrice: string;
   lineTotal: string;
 }
@@ -162,8 +252,6 @@ export interface Purchase {
   purchaseNumber: string;
   supplierId: number | null;
   supplier: Supplier | null;
-  warehouseId: number;
-  warehouse: Warehouse;
   totalAmount: string;
   createdAt: string;
   items: PurchaseItem[];

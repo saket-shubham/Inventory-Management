@@ -18,7 +18,9 @@ interface InvoicePdfData {
   paymentMode: string;
   subtotal: number;
   taxAmount: number;
-  discount: number;
+  couponCode?: string | null;
+  couponDiscountPercent?: number | null;
+  couponDiscountAmount?: number | null;
   grandTotal: number;
   customer: { name: string; phone: string | null; gstNumber: string | null } | null;
   warehouse: { name: string; location: string | null };
@@ -27,12 +29,7 @@ interface InvoicePdfData {
 
 const money = (n: number) => n.toFixed(2);
 
-export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {
-  const doc = new PDFDocument({ size: "A4", margin: 40 });
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `inline; filename="${invoice.invoiceNumber}.pdf"`);
-  doc.pipe(res);
-
+function renderInvoicePdf(doc: PDFKit.PDFDocument, invoice: InvoicePdfData) {
   doc.fontSize(18).text(env.companyName, { continued: false });
   doc.fontSize(9).fillColor("#555");
   if (env.companyAddress) doc.text(env.companyAddress);
@@ -100,8 +97,11 @@ export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {
   const totals: Array<[string, number]> = [
     ["Subtotal", invoice.subtotal],
     ["Tax", invoice.taxAmount],
-    ["Discount", -invoice.discount],
   ];
+  // Coupon row only appears when a coupon was actually applied to this invoice.
+  if (invoice.couponCode && invoice.couponDiscountAmount) {
+    totals.push([`Coupon (${invoice.couponCode}, ${invoice.couponDiscountPercent}%)`, -invoice.couponDiscountAmount]);
+  }
   for (const [label, value] of totals) {
     doc.text(label, 350, y, { width: 90, align: "right" });
     doc.text(money(value), 440, y, { width: 60, align: "right" });
@@ -109,6 +109,26 @@ export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {
   }
   doc.fontSize(11).text("Grand Total", 350, y, { width: 90, align: "right" });
   doc.text(money(invoice.grandTotal), 440, y, { width: 60, align: "right" });
+}
 
+export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {
+  const doc = new PDFDocument({ size: "A4", margin: 40 });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${invoice.invoiceNumber}.pdf"`);
+  doc.pipe(res);
+  renderInvoicePdf(doc, invoice);
   doc.end();
+}
+
+/** Same PDF, built in-memory — used for emailing the invoice as an attachment. */
+export function buildInvoicePdfBuffer(invoice: InvoicePdfData): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    renderInvoicePdf(doc, invoice);
+    doc.end();
+  });
 }

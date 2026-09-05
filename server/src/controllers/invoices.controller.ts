@@ -7,13 +7,15 @@ import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generateInvoiceNumber } from "../services/invoiceNumber";
 import { generateReturnNumber } from "../services/returnNumber";
-import { streamInvoicePdf } from "../services/pdfService";
+import { buildInvoicePdfBuffer, streamInvoicePdf } from "../services/pdfService";
+import { recordAudit } from "../services/auditLog";
+import { sendInvoiceEmail } from "../services/emailService";
 
 const createInvoiceSchema = z.object({
   warehouseId: z.number().int(),
   customerId: z.number().int().optional(),
   paymentMode: z.enum(["cash", "card", "upi"]),
-  discount: z.number().nonnegative().default(0),
+  couponCode: z.string().trim().min(1).optional(),
   items: z
     .array(
       z.object({
@@ -28,6 +30,7 @@ const createInvoiceSchema = z.object({
 
 export const createInvoice = asyncHandler(async (req: Request, res: Response) => {
   const data = createInvoiceSchema.parse(req.body);
+  const actor = req.user!;
 
   const invoice = await prisma.$transaction(async (tx) => {
     const productIds = data.items.map((i) => i.productId);
@@ -81,10 +84,23 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
       };
     });
 
-    const discount = new Prisma.Decimal(data.discount);
-    const grandTotal = subtotal.add(taxAmount).sub(discount);
+    // Coupon discount is always recomputed here from the subtotal, server-side
+    // — the frontend never gets to dictate the actual discount amount, only
+    // which code it wants applied.
+    let coupon: { code: string; discountPercent: Prisma.Decimal } | null = null;
+    let couponDiscountAmount = new Prisma.Decimal(0);
+    if (data.couponCode) {
+      const found = await tx.coupon.findFirst({
+        where: { code: { equals: data.couponCode, mode: "insensitive" }, isActive: true },
+      });
+      if (!found) throw new ApiError(400, "Invalid or inactive coupon code");
+      coupon = { code: found.code, discountPercent: found.discountPercent };
+      couponDiscountAmount = subtotal.mul(found.discountPercent).div(100);
+    }
+
+    const grandTotal = subtotal.add(taxAmount).sub(couponDiscountAmount);
     if (grandTotal.isNegative()) {
-      throw new ApiError(400, "Discount cannot exceed subtotal plus tax");
+      throw new ApiError(400, "Coupon discount cannot exceed subtotal plus tax");
     }
 
     const invoiceNumber = await generateInvoiceNumber(tx);
@@ -96,10 +112,17 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
         warehouseId: data.warehouseId,
         subtotal,
         taxAmount,
-        discount,
+        ...(coupon
+          ? {
+              couponCode: coupon.code,
+              couponDiscountPercent: coupon.discountPercent,
+              couponDiscountAmount,
+            }
+          : {}),
         grandTotal,
         paymentMode: data.paymentMode,
         status: "paid",
+        createdById: actor.id,
         items: { create: itemsData },
       },
       include: { items: true, customer: true, warehouse: true },
@@ -107,7 +130,8 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
 
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
-      const newQty = stock.quantity - item.qty;
+      const previousQty = stock.quantity;
+      const newQty = previousQty - item.qty;
       await tx.stock.update({
         where: { id: stock.id },
         data: { quantity: newQty },
@@ -117,21 +141,43 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
           productId: item.productId,
           warehouseId: data.warehouseId,
           changeQty: -item.qty,
+          previousQty,
           balanceQty: newQty,
           referenceType: "invoice",
           referenceId: created.id,
+          performedById: actor.id,
         },
       });
     }
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "SALE",
+      entityType: "Invoice",
+      entityId: created.id,
+      metadata: {
+        invoiceNumber: created.invoiceNumber,
+        warehouseId: data.warehouseId,
+        grandTotal: grandTotal.toString(),
+        itemCount: data.items.length,
+        couponCode: coupon?.code ?? null,
+      },
+    });
 
     return created;
   });
 
   res.status(201).json(invoice);
+
+  // Fires after the response — the customer record is already saved (it must
+  // exist to be attached above) and the invoice is committed, so this is
+  // purely the "send" step; it never affects whether billing succeeded.
+  void attemptInvoiceEmail(invoice.id);
 });
 
 export const cancelInvoice = asyncHandler(async (req: Request, res: Response) => {
   const id = Number(req.params.id);
+  const actor = req.user!;
 
   const updated = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findUnique({ where: { id }, include: { items: true } });
@@ -144,7 +190,8 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
       const stock = await tx.stock.findUnique({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
       });
-      const newQty = (stock?.quantity ?? 0) + item.qty;
+      const previousQty = stock?.quantity ?? 0;
+      const newQty = previousQty + item.qty;
 
       await tx.stock.upsert({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
@@ -157,18 +204,31 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
           productId: item.productId,
           warehouseId: invoice.warehouseId,
           changeQty: item.qty,
+          previousQty,
           balanceQty: newQty,
           referenceType: "invoice",
           referenceId: invoice.id,
+          performedById: actor.id,
+          reason: "Invoice cancelled",
         },
       });
     }
 
-    return tx.invoice.update({
+    const result = await tx.invoice.update({
       where: { id },
       data: { status: "cancelled" },
       include: { items: { include: { product: true } }, customer: true, warehouse: true },
     });
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "INVOICE_CANCELLED",
+      entityType: "Invoice",
+      entityId: invoice.id,
+      metadata: { invoiceNumber: invoice.invoiceNumber, warehouseId: invoice.warehouseId },
+    });
+
+    return result;
   });
 
   res.json(updated);
@@ -189,6 +249,7 @@ const createReturnSchema = z.object({
 export const createReturn = asyncHandler(async (req: Request, res: Response) => {
   const invoiceId = Number(req.params.id);
   const data = createReturnSchema.parse(req.body);
+  const actor = req.user!;
 
   const created = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findUnique({
@@ -232,6 +293,7 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
         returnNumber,
         invoiceId: invoice.id,
         totalRefund,
+        createdById: actor.id,
         items: { create: itemsData },
       },
       include: { items: { include: { product: true } } },
@@ -250,7 +312,8 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
       });
 
       if (reqItem.reason === "normal") {
-        const newQty = (stock?.quantity ?? 0) + reqItem.qty;
+        const previousQty = stock?.quantity ?? 0;
+        const newQty = previousQty + reqItem.qty;
         await tx.stock.upsert({
           where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
           update: { quantity: newQty },
@@ -266,9 +329,12 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
             productId: invoiceItem.productId,
             warehouseId: invoice.warehouseId,
             changeQty: reqItem.qty,
+            previousQty,
             balanceQty: newQty,
             referenceType: "return",
             referenceId: createdReturn.id,
+            performedById: actor.id,
+            reason: `Customer return (${reqItem.reason})`,
           },
         });
       } else {
@@ -288,6 +354,19 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
         // ledger tracks sellable-quantity movements only).
       }
     }
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "RETURN",
+      entityType: "Return",
+      entityId: createdReturn.id,
+      metadata: {
+        returnNumber: createdReturn.returnNumber,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        totalRefund: totalRefund.toString(),
+      },
+    });
 
     return createdReturn;
   });
@@ -345,34 +424,91 @@ export const listInvoices = asyncHandler(async (req: Request, res: Response) => 
   res.json(invoices);
 });
 
-export const downloadInvoicePdf = asyncHandler(async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+// Shared by the PDF download route and the invoice-email step below, so the
+// two never drift out of sync with each other.
+async function loadInvoicePdfData(id: number) {
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: { items: { include: { product: true } }, customer: true, warehouse: true },
   });
-  if (!invoice) throw new ApiError(404, "Invoice not found");
+  if (!invoice) return null;
 
-  streamInvoicePdf(res, {
-    invoiceNumber: invoice.invoiceNumber,
-    createdAt: invoice.createdAt,
-    paymentMode: invoice.paymentMode,
-    subtotal: Number(invoice.subtotal),
-    taxAmount: Number(invoice.taxAmount),
-    discount: Number(invoice.discount),
-    grandTotal: Number(invoice.grandTotal),
-    customer: invoice.customer
-      ? { name: invoice.customer.name, phone: invoice.customer.phone, gstNumber: invoice.customer.gstNumber }
-      : null,
-    warehouse: { name: invoice.warehouse.name, location: invoice.warehouse.location },
-    items: invoice.items.map((item) => ({
-      product: { name: item.product.name, sku: item.product.sku },
-      qty: item.qty,
-      mrp: Number(item.mrp),
-      price: Number(item.price),
-      discount: Number(item.discount),
-      taxAmount: Number(item.taxAmount),
-      lineTotal: Number(item.lineTotal),
-    })),
+  return {
+    invoice,
+    pdfData: {
+      invoiceNumber: invoice.invoiceNumber,
+      createdAt: invoice.createdAt,
+      paymentMode: invoice.paymentMode,
+      subtotal: Number(invoice.subtotal),
+      taxAmount: Number(invoice.taxAmount),
+      couponCode: invoice.couponCode,
+      couponDiscountPercent: invoice.couponDiscountPercent ? Number(invoice.couponDiscountPercent) : null,
+      couponDiscountAmount: invoice.couponDiscountAmount ? Number(invoice.couponDiscountAmount) : null,
+      grandTotal: Number(invoice.grandTotal),
+      customer: invoice.customer
+        ? { name: invoice.customer.name, phone: invoice.customer.phone, gstNumber: invoice.customer.gstNumber }
+        : null,
+      warehouse: { name: invoice.warehouse.name, location: invoice.warehouse.location },
+      items: invoice.items.map((item) => ({
+        product: { name: item.product.name, sku: item.product.sku },
+        qty: item.qty,
+        mrp: Number(item.mrp),
+        price: Number(item.price),
+        discount: Number(item.discount),
+        taxAmount: Number(item.taxAmount),
+        lineTotal: Number(item.lineTotal),
+      })),
+    },
+  };
+}
+
+export const downloadInvoicePdf = asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const loaded = await loadInvoicePdfData(id);
+  if (!loaded) throw new ApiError(404, "Invoice not found");
+  streamInvoicePdf(res, loaded.pdfData);
+});
+
+// Best-effort — never throws. An unconfigured or failing mail server must
+// never break the billing flow that generated the invoice.
+async function attemptInvoiceEmail(invoiceId: number) {
+  try {
+    const loaded = await loadInvoicePdfData(invoiceId);
+    if (!loaded?.invoice.customer?.email) return;
+
+    const pdfBuffer = await buildInvoicePdfBuffer(loaded.pdfData);
+    const result = await sendInvoiceEmail({
+      to: loaded.invoice.customer.email,
+      customerName: loaded.invoice.customer.name,
+      invoiceNumber: loaded.invoice.invoiceNumber,
+      grandTotal: loaded.invoice.grandTotal.toString(),
+      pdfBuffer,
+    });
+    console.log(
+      `Invoice ${loaded.invoice.invoiceNumber} email: ${result.sent ? "sent" : `skipped (${result.reason})`}`
+    );
+  } catch (err) {
+    console.error(`Failed to email invoice ${invoiceId}:`, err);
+  }
+}
+
+export const sendInvoiceEmailNow = asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const loaded = await loadInvoicePdfData(id);
+  if (!loaded) throw new ApiError(404, "Invoice not found");
+  if (!loaded.invoice.customer?.email) {
+    throw new ApiError(400, "This customer has no email on file");
+  }
+
+  const pdfBuffer = await buildInvoicePdfBuffer(loaded.pdfData);
+  const result = await sendInvoiceEmail({
+    to: loaded.invoice.customer.email,
+    customerName: loaded.invoice.customer.name,
+    invoiceNumber: loaded.invoice.invoiceNumber,
+    grandTotal: loaded.invoice.grandTotal.toString(),
+    pdfBuffer,
   });
+
+  if (!result.sent) throw new ApiError(502, result.reason ?? "Couldn't send the email");
+  res.json({ sent: true });
 });

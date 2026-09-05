@@ -15,7 +15,9 @@ const loginSchema = z.object({
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = loginSchema.parse(req.body);
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  // Emails are stored lowercase (see users.controller.ts) — normalize here too
+  // so login never fails just because of how someone capitalized it.
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (!user || !user.isActive) {
     throw new ApiError(401, "Invalid email or password");
   }
@@ -24,6 +26,10 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   if (!valid) {
     throw new ApiError(401, "Invalid email or password");
   }
+
+  // The user's id is assigned once at account creation and never changes —
+  // every login just re-authenticates against that same row.
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   const token = jwt.sign(
     { id: user.id, email: user.email, role: user.role },

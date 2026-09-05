@@ -4,6 +4,7 @@ import { prisma } from "../config/prisma";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generateSupplierReturnNumber } from "../services/supplierReturnNumber";
+import { recordAudit } from "../services/auditLog";
 
 const createSupplierReturnSchema = z.object({
   warehouseId: z.number().int(),
@@ -20,6 +21,7 @@ const createSupplierReturnSchema = z.object({
 
 export const createSupplierReturn = asyncHandler(async (req: Request, res: Response) => {
   const data = createSupplierReturnSchema.parse(req.body);
+  const actor = req.user!;
 
   const supplierReturn = await prisma.$transaction(async (tx) => {
     const stockRows = await tx.stock.findMany({
@@ -45,6 +47,7 @@ export const createSupplierReturn = asyncHandler(async (req: Request, res: Respo
         returnNumber,
         supplierId: data.supplierId,
         warehouseId: data.warehouseId,
+        createdById: actor.id,
         items: { create: data.items.map((i) => ({ productId: i.productId, qty: i.qty })) },
       },
       include: { items: { include: { product: true } }, supplier: true, warehouse: true },
@@ -52,11 +55,29 @@ export const createSupplierReturn = asyncHandler(async (req: Request, res: Respo
 
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
+      // Reduce the transit-sourced subset by the same amount (clamped at 0)
+      // so it can never end up larger than the new total — a return doesn't
+      // ask which source the returned units came from, so transit-sourced
+      // units are treated as returned first.
+      const newDamagedQuantityTransit = Math.max(0, stock.damagedQuantityTransit - item.qty);
       await tx.stock.update({
         where: { id: stock.id },
-        data: { damagedQuantity: stock.damagedQuantity - item.qty },
+        data: { damagedQuantity: stock.damagedQuantity - item.qty, damagedQuantityTransit: newDamagedQuantityTransit },
       });
     }
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "SUPPLIER_RETURN",
+      entityType: "SupplierReturn",
+      entityId: created.id,
+      metadata: {
+        returnNumber: created.returnNumber,
+        warehouseId: data.warehouseId,
+        warehouseName: created.warehouse.name,
+        items: created.items.map((i) => ({ productId: i.productId, productName: i.product.name, qty: i.qty })),
+      },
+    });
 
     return created;
   });

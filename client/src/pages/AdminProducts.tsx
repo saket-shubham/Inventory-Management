@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
   Layers,
   Pencil,
   Package,
@@ -14,6 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
+import { ProductImageInput } from "../components/ProductImageInput";
+import { BulkImportPanel } from "../components/BulkImportPanel";
+import type { MappedImportRow } from "../utils/bulkImport";
 import type { Product, StockByWarehouse, Warehouse } from "../types";
 
 const emptyForm = {
@@ -27,6 +31,7 @@ const emptyForm = {
   taxPercent: "0",
   unit: "pcs",
   imageUrl: "",
+  imageData: "",
 };
 
 interface BulkRow {
@@ -40,7 +45,11 @@ interface BulkRow {
   sellingPrice: string;
   taxPercent: string;
   unit: string;
-  initialStock: string;
+  imageUrl: string;
+  imageData: string;
+  stockTotal: string;
+  stockAllocations: Record<number, string>;
+  stockAutoFilled: boolean;
   error?: string;
 }
 
@@ -56,7 +65,11 @@ function makeEmptyBulkRow(id: number): BulkRow {
     sellingPrice: "",
     taxPercent: "0",
     unit: "pcs",
-    initialStock: "",
+    imageUrl: "",
+    imageData: "",
+    stockTotal: "",
+    stockAllocations: {},
+    stockAutoFilled: true,
   };
 }
 
@@ -64,7 +77,9 @@ export function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [form, setForm] = useState(emptyForm);
-  const [initialStock, setInitialStock] = useState<Record<number, string>>({});
+  const [stockTotal, setStockTotal] = useState("");
+  const [stockAllocations, setStockAllocations] = useState<Record<number, string>>({});
+  const [stockAutoFilled, setStockAutoFilled] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -79,12 +94,12 @@ export function AdminProducts() {
     bulkRowIdRef.current += 1;
     return bulkRowIdRef.current;
   }
-  const [bulkWarehouseId, setBulkWarehouseId] = useState<number | "">("");
   const [bulkRows, setBulkRows] = useState<BulkRow[]>(() =>
     Array.from({ length: 3 }, () => makeEmptyBulkRow(++bulkRowIdRef.current))
   );
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkSummary, setBulkSummary] = useState<string | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
 
   const [showInactive, setShowInactive] = useState(false);
   const [statusChangingId, setStatusChangingId] = useState<number | null>(null);
@@ -98,6 +113,7 @@ export function AdminProducts() {
 
   useEffect(() => {
     loadProducts();
+<<<<<<< HEAD
     api.get<Warehouse[]>("/warehouses").then((res) => {
       setWarehouses(res.data);
       const defaultWarehouse = res.data.find((w) => w.name === "Warehouse") ?? res.data[0];
@@ -106,6 +122,33 @@ export function AdminProducts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+=======
+    api.get<Warehouse[]>("/warehouses").then((res) => setWarehouses(res.data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const defaultStockWarehouse = warehouses.find((w) => w.name === "Warehouse") ?? warehouses[0];
+  const existingBarcodes = new Set(products.map((p) => p.barcode));
+  const existingSkus = new Set(products.map((p) => p.sku));
+
+  function applyTotalToSingleForm(value: string) {
+    setStockTotal(value);
+    if (stockAutoFilled && defaultStockWarehouse) {
+      setStockAllocations((prev) => ({ ...prev, [defaultStockWarehouse.id]: value }));
+    }
+  }
+
+  function updateSingleFormAllocation(warehouseId: number, value: string) {
+    setStockAutoFilled(false);
+    setStockAllocations((prev) => ({ ...prev, [warehouseId]: value }));
+  }
+
+  const stockAllocated = warehouses.reduce((sum, w) => sum + (Number(stockAllocations[w.id]) || 0), 0);
+  const stockTotalNum = Number(stockTotal) || 0;
+  const stockRemaining = stockTotalNum - stockAllocated;
+  const stockSplitValid = stockTotalNum === 0 || stockRemaining === 0;
+
+>>>>>>> purchase1
   useEffect(() => {
     loadProducts(showInactive);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,21 +194,32 @@ export function AdminProducts() {
       taxPercent: String(product.taxPercent),
       unit: product.unit,
       imageUrl: product.imageUrl ?? "",
+      imageData: product.imageData ?? "",
     });
     setError(null);
     setSuccess(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function resetStockSplit() {
+    setStockTotal("");
+    setStockAllocations({});
+    setStockAutoFilled(true);
+  }
+
   function cancelEdit() {
     setEditingId(null);
     setForm(emptyForm);
-    setInitialStock({});
+    resetStockSplit();
     setError(null);
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!editingId && !stockSplitValid) {
+      setError("Initial stock split doesn't add up to the total — fix it before saving.");
+      return;
+    }
     setError(null);
     setSuccess(null);
     setSubmitting(true);
@@ -180,6 +234,7 @@ export function AdminProducts() {
           taxPercent: Number(form.taxPercent),
           unit: form.unit,
           imageUrl: form.imageUrl || undefined,
+          imageData: form.imageData || undefined,
         });
         setSuccess(`Product "${form.name}" updated.`);
         setEditingId(null);
@@ -196,8 +251,9 @@ export function AdminProducts() {
           taxPercent: Number(form.taxPercent),
           unit: form.unit,
           imageUrl: form.imageUrl || undefined,
-          initialStock: Object.entries(initialStock)
-            .filter(([, qty]) => qty.trim() !== "")
+          imageData: form.imageData || undefined,
+          initialStock: Object.entries(stockAllocations)
+            .filter(([, qty]) => qty.trim() !== "" && Number(qty) > 0)
             .map(([warehouseId, qty]) => ({
               warehouseId: Number(warehouseId),
               quantity: Number(qty),
@@ -206,7 +262,7 @@ export function AdminProducts() {
         });
         setSuccess(`Product "${form.name}" created.`);
         setForm(emptyForm);
-        setInitialStock({});
+        resetStockSplit();
       }
       loadProducts();
     } catch (err) {
@@ -224,8 +280,73 @@ export function AdminProducts() {
     setBulkRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch, error: undefined } : r)));
   }
 
+  function updateBulkRowTotal(id: number, value: string) {
+    setBulkRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const updated: BulkRow = { ...r, stockTotal: value, error: undefined };
+        if (r.stockAutoFilled && defaultStockWarehouse) {
+          updated.stockAllocations = { ...updated.stockAllocations, [defaultStockWarehouse.id]: value };
+        }
+        return updated;
+      })
+    );
+  }
+
+  function updateBulkRowAllocation(id: number, warehouseId: number, value: string) {
+    setBulkRows((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, stockAutoFilled: false, stockAllocations: { ...r.stockAllocations, [warehouseId]: value }, error: undefined }
+          : r
+      )
+    );
+  }
+
+  function bulkRowAllocated(row: BulkRow): number {
+    return warehouses.reduce((sum, w) => sum + (Number(row.stockAllocations[w.id]) || 0), 0);
+  }
+
+  function bulkRowRemaining(row: BulkRow): number {
+    return (Number(row.stockTotal) || 0) - bulkRowAllocated(row);
+  }
+
   function removeBulkRow(id: number) {
     setBulkRows((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  // Turns confirmed import rows into the exact same BulkRow shape a manually
+  // typed row would have — from here on they're indistinguishable from
+  // hand-entered rows: same edit controls, same validation, same "Save all".
+  // Nothing is sent to the server here.
+  function handleImportConfirm(rows: MappedImportRow[]) {
+    const imported: BulkRow[] = rows.map((row) => {
+      const stockTotal = row.stockTotal.trim();
+      return {
+        id: nextBulkRowId(),
+        name: row.name,
+        sku: row.sku,
+        barcode: row.barcode,
+        category: row.category,
+        brand: row.brand,
+        mrp: row.mrp,
+        sellingPrice: row.sellingPrice,
+        taxPercent: row.taxPercent.trim() || "0",
+        unit: row.unit.trim() || "pcs",
+        imageUrl: row.imageUrl,
+        imageData: "",
+        stockTotal,
+        stockAllocations: stockTotal && defaultStockWarehouse ? { [defaultStockWarehouse.id]: stockTotal } : {},
+        stockAutoFilled: true,
+        error: row.errors.length > 0 ? row.errors.join("; ") : undefined,
+      };
+    });
+
+    setBulkRows((prev) => {
+      const kept = prev.filter((r) => r.name.trim() || r.barcode.trim());
+      return [...kept, ...imported];
+    });
+    setShowImportPanel(false);
   }
 
   async function handleBulkSubmit() {
@@ -235,17 +356,17 @@ export function AdminProducts() {
     const isBlank = (r: BulkRow) => !r.name.trim() && !r.barcode.trim();
     const submittable = bulkRows.filter((r) => !isBlank(r));
 
-    // Rows missing a required field never leave the browser — flag them locally.
-    const locallyInvalid = new Set<number>();
+    // Rows missing a required field, or with a stock split that doesn't add up, never leave the browser.
+    const locallyInvalid = new Map<number, string>();
     for (const r of submittable) {
       if (!r.name.trim() || !r.barcode.trim() || !r.mrp.trim() || !r.sellingPrice.trim()) {
-        locallyInvalid.add(r.id);
+        locallyInvalid.set(r.id, "Name, barcode, MRP and price are required");
+      } else if (Number(r.stockTotal) > 0 && bulkRowRemaining(r) !== 0) {
+        locallyInvalid.set(r.id, "Stock split doesn't add up to the total");
       }
     }
     if (locallyInvalid.size > 0) {
-      setBulkRows((prev) =>
-        prev.map((r) => (locallyInvalid.has(r.id) ? { ...r, error: "Name, barcode, MRP and price are required" } : r))
-      );
+      setBulkRows((prev) => prev.map((r) => (locallyInvalid.has(r.id) ? { ...r, error: locallyInvalid.get(r.id) } : r)));
     }
 
     const toSend = submittable.filter((r) => !locallyInvalid.has(r.id));
@@ -256,7 +377,6 @@ export function AdminProducts() {
       const res = await api.post<{
         results: Array<{ index: number; success: true } | { index: number; success: false; error: string }>;
       }>("/products/bulk", {
-        warehouseId: bulkWarehouseId || undefined,
         products: toSend.map((r) => ({
           name: r.name,
           sku: r.sku.trim() || undefined,
@@ -267,7 +387,11 @@ export function AdminProducts() {
           sellingPrice: Number(r.sellingPrice),
           taxPercent: Number(r.taxPercent || 0),
           unit: r.unit || "pcs",
-          initialStock: r.initialStock.trim() !== "" ? Number(r.initialStock) : undefined,
+          imageUrl: r.imageUrl || undefined,
+          imageData: r.imageData || undefined,
+          initialStock: Object.entries(r.stockAllocations)
+            .filter(([, qty]) => qty && Number(qty) > 0)
+            .map(([warehouseId, qty]) => ({ warehouseId: Number(warehouseId), quantity: Number(qty) })),
         })),
       });
 
@@ -395,28 +519,67 @@ export function AdminProducts() {
             Unit
             <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
           </label>
-          <label>
-            Image URL
-            <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
-          </label>
         </div>
+
+        <h4>Product image</h4>
+        <ProductImageInput
+          imageUrl={form.imageUrl}
+          imageData={form.imageData}
+          onChangeUrl={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+          onChangeData={(data) => setForm((f) => ({ ...f, imageData: data }))}
+        />
 
         {!editingId && (
           <>
-            <h4>Initial stock (optional)</h4>
+            <h4>Initial stock</h4>
             <div className="form-grid">
-              {warehouses.map((w) => (
-                <label key={w.id}>
-                  {w.name}
-                  <input
-                    type="number"
-                    min={0}
-                    value={initialStock[w.id] ?? ""}
-                    onChange={(e) => setInitialStock({ ...initialStock, [w.id]: e.target.value })}
-                  />
-                </label>
-              ))}
+              <label>
+                Total quantity
+                <input
+                  type="number"
+                  min={0}
+                  value={stockTotal}
+                  onChange={(e) => applyTotalToSingleForm(e.target.value)}
+                />
+              </label>
             </div>
+
+            {stockTotalNum > 0 && (
+              <>
+                <p className="help-text">
+                  Defaults entirely to <strong>{defaultStockWarehouse?.name ?? "Warehouse"}</strong> — adjust below
+                  only if this stock needs to be split across locations.
+                </p>
+                <div className="form-grid">
+                  {warehouses.map((w) => (
+                    <label key={w.id}>
+                      {w.name}
+                      <input
+                        type="number"
+                        min={0}
+                        value={stockAllocations[w.id] ?? ""}
+                        onChange={(e) => updateSingleFormAllocation(w.id, e.target.value)}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className={stockRemaining === 0 ? "success-text" : "error-text"} style={{ marginTop: 8 }}>
+                  {stockRemaining === 0 ? (
+                    <>
+                      <CheckCircle2 size={14} /> Balanced — {stockTotalNum} total
+                    </>
+                  ) : stockRemaining > 0 ? (
+                    <>
+                      <TriangleAlert size={14} /> {stockRemaining} not yet allocated
+                    </>
+                  ) : (
+                    <>
+                      <TriangleAlert size={14} /> Over-allocated by {-stockRemaining}
+                    </>
+                  )}
+                </p>
+              </>
+            )}
           </>
         )}
 
@@ -431,7 +594,7 @@ export function AdminProducts() {
           </p>
         )}
         <div style={{ display: "flex", gap: 10 }}>
-          <button type="submit" className="primary" disabled={submitting}>
+          <button type="submit" className="primary" disabled={submitting || (!editingId && !stockSplitValid)}>
             {submitting ? "Saving..." : editingId ? "Update product" : "Save product"}
           </button>
           {editingId && (
@@ -443,25 +606,32 @@ export function AdminProducts() {
       </form>
 
       <div className="admin-form">
-        <h3>
-          <Layers size={16} /> Bulk add products
-        </h3>
+        <div className="section-header">
+          <h3 style={{ marginBottom: 0 }}>
+            <Layers size={16} /> Bulk add products
+          </h3>
+          {!showImportPanel && (
+            <button type="button" className="link-button" onClick={() => setShowImportPanel(true)}>
+              <FileSpreadsheet size={14} /> Import from Excel/CSV
+            </button>
+          )}
+        </div>
         <p className="help-text">
           Add several products at once — fill in as many rows as you need. Leave <strong>SKU</strong> blank to
-          auto-generate one. Rows that fail (e.g. duplicate barcode) stay in the table with the reason shown, so you
+          auto-generate one. For stock, just fill <strong>Total</strong> — it defaults entirely to{" "}
+          <strong>{defaultStockWarehouse?.name ?? "Warehouse"}</strong> unless you split it across the warehouse
+          columns yourself. Rows that fail (e.g. duplicate barcode) stay in the table with the reason shown, so you
           only need to fix and resubmit those.
         </p>
 
-        <label style={{ maxWidth: 260, marginBottom: 12 }}>
-          Add initial stock to warehouse
-          <select value={bulkWarehouseId} onChange={(e) => setBulkWarehouseId(Number(e.target.value))}>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showImportPanel && (
+          <BulkImportPanel
+            existingBarcodes={existingBarcodes}
+            existingSkus={existingSkus}
+            onConfirm={handleImportConfirm}
+            onClose={() => setShowImportPanel(false)}
+          />
+        )}
 
         <div className="bulk-table-wrap">
           <table className="cart-table bulk-table">
@@ -476,85 +646,124 @@ export function AdminProducts() {
                 <th>Price *</th>
                 <th>Tax %</th>
                 <th>Unit</th>
-                <th>Initial stock</th>
+                <th>Image</th>
+                <th>Total stock</th>
+                {warehouses.map((w) => (
+                  <th key={w.id}>{w.name}</th>
+                ))}
+                <th>Remaining</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {bulkRows.map((row) => (
-                <tr key={row.id} className={row.error ? "bulk-row-error" : ""}>
-                  <td>
-                    <input value={row.name} onChange={(e) => updateBulkRow(row.id, { name: e.target.value })} />
-                  </td>
-                  <td>
-                    <input
-                      placeholder="auto"
-                      value={row.sku}
-                      onChange={(e) => updateBulkRow(row.id, { sku: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input value={row.barcode} onChange={(e) => updateBulkRow(row.id, { barcode: e.target.value })} />
-                  </td>
-                  <td>
-                    <input value={row.category} onChange={(e) => updateBulkRow(row.id, { category: e.target.value })} />
-                  </td>
-                  <td>
-                    <input value={row.brand} onChange={(e) => updateBulkRow(row.id, { brand: e.target.value })} />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      className="qty-input"
-                      value={row.mrp}
-                      onChange={(e) => updateBulkRow(row.id, { mrp: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      className="qty-input"
-                      value={row.sellingPrice}
-                      onChange={(e) => updateBulkRow(row.id, { sellingPrice: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      className="qty-input"
-                      value={row.taxPercent}
-                      onChange={(e) => updateBulkRow(row.id, { taxPercent: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input className="qty-input" value={row.unit} onChange={(e) => updateBulkRow(row.id, { unit: e.target.value })} />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      className="qty-input"
-                      value={row.initialStock}
-                      onChange={(e) => updateBulkRow(row.id, { initialStock: e.target.value })}
-                      disabled={!bulkWarehouseId}
-                    />
-                  </td>
-                  <td>
-                    <button type="button" className="link-button" onClick={() => removeBulkRow(row.id)}>
-                      <X size={13} />
-                    </button>
-                    {row.error && (
-                      <p className="error-text bulk-row-error-text">
-                        <TriangleAlert size={12} /> {row.error}
-                      </p>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {bulkRows.map((row) => {
+                const remaining = bulkRowRemaining(row);
+                const total = Number(row.stockTotal) || 0;
+                return (
+                  <tr key={row.id} className={row.error ? "bulk-row-error" : ""}>
+                    <td>
+                      <input value={row.name} onChange={(e) => updateBulkRow(row.id, { name: e.target.value })} />
+                    </td>
+                    <td>
+                      <input
+                        placeholder="auto"
+                        value={row.sku}
+                        onChange={(e) => updateBulkRow(row.id, { sku: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input value={row.barcode} onChange={(e) => updateBulkRow(row.id, { barcode: e.target.value })} />
+                    </td>
+                    <td>
+                      <input value={row.category} onChange={(e) => updateBulkRow(row.id, { category: e.target.value })} />
+                    </td>
+                    <td>
+                      <input value={row.brand} onChange={(e) => updateBulkRow(row.id, { brand: e.target.value })} />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={0}
+                        className="qty-input"
+                        value={row.mrp}
+                        onChange={(e) => updateBulkRow(row.id, { mrp: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={0}
+                        className="qty-input"
+                        value={row.sellingPrice}
+                        onChange={(e) => updateBulkRow(row.id, { sellingPrice: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className="qty-input"
+                        value={row.taxPercent}
+                        onChange={(e) => updateBulkRow(row.id, { taxPercent: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input className="qty-input" value={row.unit} onChange={(e) => updateBulkRow(row.id, { unit: e.target.value })} />
+                    </td>
+                    <td>
+                      <ProductImageInput
+                        compact
+                        imageUrl={row.imageUrl}
+                        imageData={row.imageData}
+                        onChangeUrl={(url) => updateBulkRow(row.id, { imageUrl: url })}
+                        onChangeData={(data) => updateBulkRow(row.id, { imageData: data })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={0}
+                        className="qty-input"
+                        value={row.stockTotal}
+                        onChange={(e) => updateBulkRowTotal(row.id, e.target.value)}
+                      />
+                    </td>
+                    {warehouses.map((w) => (
+                      <td key={w.id}>
+                        <input
+                          type="number"
+                          min={0}
+                          className="qty-input"
+                          value={row.stockAllocations[w.id] ?? ""}
+                          onChange={(e) => updateBulkRowAllocation(row.id, w.id, e.target.value)}
+                        />
+                      </td>
+                    ))}
+                    <td>
+                      {total === 0 ? (
+                        <span className="muted small">—</span>
+                      ) : remaining === 0 ? (
+                        <span className="discount-badge">balanced</span>
+                      ) : remaining > 0 ? (
+                        <span className="low-stock-badge">{remaining} left</span>
+                      ) : (
+                        <span className="out-of-stock-badge">over by {-remaining}</span>
+                      )}
+                    </td>
+                    <td>
+                      <button type="button" className="link-button" onClick={() => removeBulkRow(row.id)}>
+                        <X size={13} />
+                      </button>
+                      {row.error && (
+                        <p className="error-text bulk-row-error-text">
+                          <TriangleAlert size={12} /> {row.error}
+                        </p>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

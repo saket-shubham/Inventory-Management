@@ -1,18 +1,27 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Ban, Download, PlusCircle, RotateCcw, TriangleAlert } from "lucide-react";
+import { Ban, CheckCircle2, Download, Mail, MessageCircle, PlusCircle, RotateCcw, TriangleAlert } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
-import { useAuth } from "../context/AuthContext";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Invoice, ReturnReason } from "../types";
 
+// wa.me needs the full international number, no "+", no spaces/dashes.
+// Indian mobile numbers are stored as plain 10-digit locally, so a bare
+// 10-digit number is assumed to be a domestic number and gets "91" prefixed.
+function toWhatsAppNumber(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length === 10 ? `91${digits}` : digits;
+}
+
 export function InvoiceDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailResult, setEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [returningItemId, setReturningItemId] = useState<number | null>(null);
   const [returnQty, setReturnQty] = useState(1);
@@ -32,6 +41,25 @@ export function InvoiceDetail() {
   if (!invoice) return <div className="page-loading">Loading invoice...</div>;
 
   const pdfUrl = `${api.defaults.baseURL}/invoices/${invoice.id}/pdf`;
+
+  const whatsappUrl = invoice.customer?.phone
+    ? `https://wa.me/${toWhatsAppNumber(invoice.customer.phone)}?text=${encodeURIComponent(
+        `Hi ${invoice.customer.name}, thank you for your purchase!\nInvoice: ${invoice.invoiceNumber}\nTotal: ₹${Number(invoice.grandTotal).toFixed(2)}\n${invoice.warehouse.name}`
+      )}`
+    : null;
+
+  async function handleSendEmail() {
+    setSendingEmail(true);
+    setEmailResult(null);
+    try {
+      await api.post(`/invoices/${invoice!.id}/send-email`);
+      setEmailResult({ ok: true, message: "Email sent." });
+    } catch (err) {
+      setEmailResult({ ok: false, message: apiErrorMessage(err) });
+    } finally {
+      setSendingEmail(false);
+    }
+  }
 
   async function handleCancel() {
     setCancelling(true);
@@ -102,10 +130,20 @@ export function InvoiceDetail() {
           >
             <Download size={15} /> Download / Print PDF
           </a>
+          {whatsappUrl && (
+            <a className="button-link" href={whatsappUrl} target="_blank" rel="noreferrer">
+              <MessageCircle size={15} /> Send on WhatsApp
+            </a>
+          )}
+          {invoice.customer?.email && (
+            <button type="button" className="button-link" disabled={sendingEmail} onClick={handleSendEmail}>
+              <Mail size={15} /> {sendingEmail ? "Sending..." : "Resend Email"}
+            </button>
+          )}
           <Link to="/" className="button-link">
             <PlusCircle size={15} /> New sale
           </Link>
-          {user?.role === "admin" && invoice.status === "paid" && !confirmingCancel && (
+          {invoice.status === "paid" && !confirmingCancel && (
             <button type="button" className="danger-button" onClick={() => setConfirmingCancel(true)}>
               <Ban size={15} /> Cancel invoice
             </button>
@@ -136,6 +174,11 @@ export function InvoiceDetail() {
           <strong>Customer:</strong> {invoice.customer.name} {invoice.customer.phone ?? ""}
         </p>
       )}
+      {emailResult && (
+        <p className={emailResult.ok ? "success-text" : "error-text"}>
+          {emailResult.ok ? <CheckCircle2 size={14} /> : <TriangleAlert size={14} />} {emailResult.message}
+        </p>
+      )}
 
       <table className="cart-table">
         <thead>
@@ -154,7 +197,7 @@ export function InvoiceDetail() {
         <tbody>
           {invoice.items.map((item) => {
             const returnable = item.qty - item.returnedQty;
-            const canReturn = user?.role === "admin" && invoice.status === "paid" && returnable > 0;
+            const canReturn = invoice.status === "paid" && returnable > 0;
             return (
               <Fragment key={item.id}>
                 <tr>
@@ -248,10 +291,14 @@ export function InvoiceDetail() {
           <span>Tax</span>
           <span>₹{Number(invoice.taxAmount).toFixed(2)}</span>
         </div>
-        <div>
-          <span>Discount</span>
-          <span>₹{Number(invoice.discount).toFixed(2)}</span>
-        </div>
+        {invoice.couponCode && (
+          <div>
+            <span>
+              Coupon ({invoice.couponCode} — {Number(invoice.couponDiscountPercent)}%)
+            </span>
+            <span>−₹{Number(invoice.couponDiscountAmount).toFixed(2)}</span>
+          </div>
+        )}
         <div className="grand-total">
           <span>Grand Total</span>
           <span>₹{Number(invoice.grandTotal).toFixed(2)}</span>

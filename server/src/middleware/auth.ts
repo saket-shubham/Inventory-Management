@@ -6,7 +6,7 @@ import { ApiError } from "../utils/ApiError";
 export interface AuthUser {
   id: number;
   email: string;
-  role: "admin" | "cashier";
+  role: "admin" | "staff";
 }
 
 declare global {

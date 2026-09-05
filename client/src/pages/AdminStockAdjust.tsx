@@ -16,10 +16,12 @@ export function AdminStockAdjust() {
   const [warehouseId, setWarehouseId] = useState<number | "">("");
   const [changeQty, setChangeQty] = useState("");
   const [reorderLevel, setReorderLevel] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
 
   const [fromWarehouseId, setFromWarehouseId] = useState<number | "">("");
   const [toWarehouseId, setToWarehouseId] = useState<number | "">("");
   const [transferQty, setTransferQty] = useState("");
+  const [transferReason, setTransferReason] = useState("");
 
   const [damageWarehouseId, setDamageWarehouseId] = useState<number | "">("");
   const [damageQty, setDamageQty] = useState("");
@@ -77,9 +79,11 @@ export function AdminStockAdjust() {
         warehouseId,
         changeQty: Number(changeQty),
         ...(reorderLevel.trim() !== "" ? { reorderLevel: Number(reorderLevel) } : {}),
+        ...(adjustReason.trim() !== "" ? { reason: adjustReason.trim() } : {}),
       });
       setMessage("Stock adjusted.");
       setChangeQty("");
+      setAdjustReason("");
       refreshStock();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -99,10 +103,16 @@ export function AdminStockAdjust() {
     setError(null);
     setMessage(null);
     try {
-      await api.post("/stock/adjust", { productId: selectedProduct.id, warehouseId: fromWarehouseId, changeQty: -qty });
-      await api.post("/stock/adjust", { productId: selectedProduct.id, warehouseId: toWarehouseId, changeQty: qty });
+      await api.post("/stock/transfer", {
+        productId: selectedProduct.id,
+        fromWarehouseId,
+        toWarehouseId,
+        qty,
+        ...(transferReason.trim() !== "" ? { reason: transferReason.trim() } : {}),
+      });
       setMessage("Stock transferred.");
       setTransferQty("");
+      setTransferReason("");
       refreshStock();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -204,7 +214,7 @@ export function AdminStockAdjust() {
               Transfer between warehouses
             </button>
             <button type="button" className={mode === "damage" ? "active" : ""} onClick={() => setMode("damage")}>
-              Mark Damaged
+              Mark Damaged (Showroom)
             </button>
           </div>
 
@@ -228,6 +238,15 @@ export function AdminStockAdjust() {
               <label>
                 New reorder level (optional)
                 <input type="number" min={0} value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} />
+              </label>
+              <label>
+                Reason (optional)
+                <input
+                  type="text"
+                  placeholder="e.g. Physical stock count"
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                />
               </label>
               <button type="button" className="primary" disabled={submitting} onClick={handleAdjust}>
                 Apply adjustment
@@ -261,6 +280,15 @@ export function AdminStockAdjust() {
                 Quantity
                 <input type="number" min={1} value={transferQty} onChange={(e) => setTransferQty(e.target.value)} />
               </label>
+              <label>
+                Reason (optional)
+                <input
+                  type="text"
+                  placeholder="e.g. Rebalancing showroom stock"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                />
+              </label>
               <button type="button" className="primary" disabled={submitting} onClick={handleTransfer}>
                 Transfer
               </button>
@@ -268,10 +296,16 @@ export function AdminStockAdjust() {
           ) : (
             <div>
               <p className="help-text">
-                <PackageX size={14} /> Use this when you find a broken/defective piece in your own stock (not a
-                customer return). It moves units from <strong>sellable</strong> stock into a{" "}
-                <strong>damaged</strong> holding area — they can no longer be sold. To send them back to the
-                supplier afterwards, go to{" "}
+                <PackageX size={14} /> Use this for <strong>Damage on Showroom</strong> — a broken/defective piece
+                found in your own stock after it reached the showroom (handling, display, accident — not a customer
+                return, and not damage found while receiving a purchase). It moves units from{" "}
+                <strong>sellable</strong> stock into the damaged holding area — they can no longer be sold. For
+                units damaged in transit from a supplier, record them directly on the{" "}
+                <Link to="/admin/purchases" className="inline-link">
+                  Purchases
+                </Link>{" "}
+                form instead, under "Damaged (transit)" — they should never enter sellable stock in the first place.
+                To send any damaged stock back to a supplier, go to{" "}
                 <Link to="/admin/purchases" className="inline-link">
                   Purchases → Return to Supplier
                 </Link>

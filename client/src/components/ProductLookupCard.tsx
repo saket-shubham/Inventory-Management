@@ -18,8 +18,8 @@ export function ProductLookupCard({ product, billingWarehouseId, onAddToCart }: 
   return (
     <div className="product-card">
       <div className="product-card-main">
-        {product.imageUrl ? (
-          <img src={product.imageUrl} alt={product.name} className="product-image" />
+        {product.imageData || product.imageUrl ? (
+          <img src={product.imageData || product.imageUrl || undefined} alt={product.name} className="product-image" />
         ) : (
           <div className="product-image placeholder">No image</div>
         )}

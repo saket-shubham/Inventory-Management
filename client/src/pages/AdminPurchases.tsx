@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   PackageSearch,
   Plus,
   RotateCcw,
@@ -16,8 +18,15 @@ import type { DamagedStockRow, Product, Purchase, Supplier, SupplierReturn, Ware
 interface PurchaseLine {
   product: Product;
   totalQty: string;
+<<<<<<< HEAD
   costPrice: string;
   allocations: Record<number, string>;
+=======
+  damagedQty: string;
+  costPrice: string;
+  allocations: Record<number, string>;
+  autoFilled: boolean;
+>>>>>>> purchase1
 }
 
 interface ReturnLine {
@@ -50,6 +59,8 @@ export function AdminPurchases() {
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [supplierReturns, setSupplierReturns] = useState<SupplierReturn[]>([]);
+  const [expandedPurchaseId, setExpandedPurchaseId] = useState<number | null>(null);
+  const [expandedReturnId, setExpandedReturnId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -98,10 +109,26 @@ export function AdminPurchases() {
     setSupplierSearch("");
   }
 
+  const defaultPurchaseWarehouse = warehouses.find((w) => w.name === "Warehouse") ?? warehouses[0];
+
   function addProductLine(product: Product) {
     setLines((prev) => {
       if (prev.some((l) => l.product.id === product.id)) return prev;
+<<<<<<< HEAD
       return [...prev, { product, totalQty: "", costPrice: String(product.sellingPrice), allocations: {} }];
+=======
+      return [
+        ...prev,
+        {
+          product,
+          totalQty: "",
+          damagedQty: "0",
+          costPrice: String(product.sellingPrice),
+          allocations: {},
+          autoFilled: true,
+        },
+      ];
+>>>>>>> purchase1
     });
     setProductSearch("");
     setProductResults([]);
@@ -111,10 +138,32 @@ export function AdminPurchases() {
     setLines((prev) => prev.map((l) => (l.product.id === productId ? { ...l, ...patch } : l)));
   }
 
+<<<<<<< HEAD
   function updateAllocation(productId: number, warehouseIdKey: number, value: string) {
     setLines((prev) =>
       prev.map((l) =>
         l.product.id === productId ? { ...l, allocations: { ...l.allocations, [warehouseIdKey]: value } } : l
+=======
+  function updateLineTotal(productId: number, value: string) {
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.product.id !== productId) return l;
+        const updated: PurchaseLine = { ...l, totalQty: value };
+        if (l.autoFilled && defaultPurchaseWarehouse) {
+          updated.allocations = { ...updated.allocations, [defaultPurchaseWarehouse.id]: value };
+        }
+        return updated;
+      })
+    );
+  }
+
+  function updateAllocation(productId: number, warehouseIdKey: number, value: string) {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.product.id === productId
+          ? { ...l, autoFilled: false, allocations: { ...l.allocations, [warehouseIdKey]: value } }
+          : l
+>>>>>>> purchase1
       )
     );
   }
@@ -141,6 +190,7 @@ export function AdminPurchases() {
     setSuccess(null);
     const savedPOs: string[] = [];
     try {
+<<<<<<< HEAD
       for (const w of warehouses) {
         const items = lines
           .map((l) => ({ productId: l.product.id, qty: Number(l.allocations[w.id]) || 0, costPrice: Number(l.costPrice) || 0 }))
@@ -155,6 +205,39 @@ export function AdminPurchases() {
         savedPOs.push(`${res.data.purchaseNumber} (${w.name})`);
       }
       setSuccess(`Recorded ${savedPOs.length} purchase${savedPOs.length !== 1 ? "s" : ""}: ${savedPOs.join(", ")}`);
+=======
+      const items = lines.flatMap((l) => {
+        // Transit-damaged units for this line are attributed to whichever
+        // warehouse got the largest share of the good units — the line's
+        // primary receiving location.
+        const damagedQty = Number(l.damagedQty) || 0;
+        let primaryWarehouseId: number | null = null;
+        let primaryQty = -1;
+        for (const w of warehouses) {
+          const qty = Number(l.allocations[w.id]) || 0;
+          if (qty > primaryQty) {
+            primaryQty = qty;
+            primaryWarehouseId = w.id;
+          }
+        }
+
+        return warehouses
+          .map((w) => ({
+            productId: l.product.id,
+            warehouseId: w.id,
+            qty: Number(l.allocations[w.id]) || 0,
+            damagedQty: damagedQty > 0 && w.id === primaryWarehouseId ? damagedQty : 0,
+            costPrice: Number(l.costPrice) || 0,
+          }))
+          .filter((i) => i.qty > 0 || i.damagedQty > 0);
+      });
+
+      const res = await api.post<Purchase>("/purchases", {
+        supplierId: selectedSupplier?.id,
+        items,
+      });
+      setSuccess(`Purchase ${res.data.purchaseNumber} recorded — stock updated across ${new Set(items.map((i) => i.warehouseId)).size} warehouse(s).`);
+>>>>>>> purchase1
       setLines([]);
       setSelectedSupplier(null);
       loadPurchases();
@@ -291,9 +374,16 @@ export function AdminPurchases() {
             <PackageSearch size={15} /> Add products
           </h4>
           <p className="help-text">
+<<<<<<< HEAD
             <PackageSearch size={14} /> Enter the <strong>total quantity you actually received</strong> per your
             supplier's slip, then split it across warehouses below. The split must add up exactly to the total
             before you can save — no more guessing where everything went.
+=======
+            <strong>Total received (good)</strong> is what goes into normal/sellable stock — unchanged from before.
+            If some units arrived already damaged from the supplier, add them separately under{" "}
+            <strong>Damaged (transit)</strong> — they're recorded straight into Damaged Products and never touch
+            sellable stock.
+>>>>>>> purchase1
           </p>
           <input
             placeholder="Search product by name / SKU / barcode"
@@ -318,7 +408,12 @@ export function AdminPurchases() {
                 <thead>
                   <tr>
                     <th>Product</th>
+<<<<<<< HEAD
                     <th>Total received</th>
+=======
+                    <th>Total received (good)</th>
+                    <th>Damaged (transit)</th>
+>>>>>>> purchase1
                     <th>Cost price</th>
                     {warehouses.map((w) => (
                       <th key={w.id}>{w.name}</th>
@@ -342,7 +437,20 @@ export function AdminPurchases() {
                             min={0}
                             className="qty-input"
                             value={l.totalQty}
+<<<<<<< HEAD
                             onChange={(e) => updateLine(l.product.id, { totalQty: e.target.value })}
+=======
+                            onChange={(e) => updateLineTotal(l.product.id, e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            className="qty-input"
+                            value={l.damagedQty}
+                            onChange={(e) => updateLine(l.product.id, { damagedQty: e.target.value })}
+>>>>>>> purchase1
                           />
                         </td>
                         <td>
@@ -543,29 +651,68 @@ export function AdminPurchases() {
           <tr>
             <th>PO #</th>
             <th>Date</th>
-            <th>Products</th>
             <th>Supplier</th>
-            <th>Warehouse</th>
             <th>Total</th>
           </tr>
         </thead>
         <tbody>
           {purchases.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted">
+              <td colSpan={4} className="muted">
                 No purchases recorded yet.
               </td>
             </tr>
           )}
           {purchases.map((p) => (
-            <tr key={p.id}>
-              <td>{p.purchaseNumber}</td>
-              <td>{new Date(p.createdAt).toLocaleDateString()}</td>
-              <td>{p.items.map((i) => `${i.product.name} (×${i.qty})`).join(", ")}</td>
-              <td>{p.supplier?.name ?? "—"}</td>
-              <td>{p.warehouse.name}</td>
-              <td>₹{Number(p.totalAmount).toFixed(2)}</td>
-            </tr>
+            <Fragment key={p.id}>
+              <tr>
+                <td>
+                  <button
+                    type="button"
+                    className="product-name-toggle"
+                    onClick={() => setExpandedPurchaseId(expandedPurchaseId === p.id ? null : p.id)}
+                  >
+                    {expandedPurchaseId === p.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {p.purchaseNumber}
+                  </button>
+                </td>
+                <td>{new Date(p.createdAt).toLocaleDateString()}</td>
+                <td>{p.supplier?.name ?? "—"}</td>
+                <td>₹{Number(p.totalAmount).toFixed(2)}</td>
+              </tr>
+              {expandedPurchaseId === p.id && (
+                <tr>
+                  <td colSpan={4} className="stock-expand-cell">
+                    <table className="stock-table">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Warehouse</th>
+                          <th>Qty</th>
+                          <th>Damaged (transit)</th>
+                          <th>Cost price</th>
+                          <th>Line total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.items.map((i) => (
+                          <tr key={i.id}>
+                            <td>
+                              {i.product.name} <span className="muted small">({i.product.sku})</span>
+                            </td>
+                            <td>{i.warehouse.name}</td>
+                            <td>{i.qty}</td>
+                            <td>{i.damagedQty > 0 ? <span className="out-of-stock-badge">{i.damagedQty}</span> : "—"}</td>
+                            <td>₹{Number(i.costPrice).toFixed(2)}</td>
+                            <td>₹{Number(i.lineTotal).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -576,7 +723,6 @@ export function AdminPurchases() {
           <tr>
             <th>Return #</th>
             <th>Date</th>
-            <th>Products</th>
             <th>Supplier</th>
             <th>Warehouse</th>
           </tr>
@@ -584,19 +730,53 @@ export function AdminPurchases() {
         <tbody>
           {supplierReturns.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
+              <td colSpan={4} className="muted">
                 No supplier returns recorded yet.
               </td>
             </tr>
           )}
           {supplierReturns.map((r) => (
-            <tr key={r.id}>
-              <td>{r.returnNumber}</td>
-              <td>{new Date(r.createdAt).toLocaleDateString()}</td>
-              <td>{r.items.map((i) => `${i.product.name} (×${i.qty})`).join(", ")}</td>
-              <td>{r.supplier?.name ?? "—"}</td>
-              <td>{r.warehouse.name}</td>
-            </tr>
+            <Fragment key={r.id}>
+              <tr>
+                <td>
+                  <button
+                    type="button"
+                    className="product-name-toggle"
+                    onClick={() => setExpandedReturnId(expandedReturnId === r.id ? null : r.id)}
+                  >
+                    {expandedReturnId === r.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {r.returnNumber}
+                  </button>
+                </td>
+                <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+                <td>{r.supplier?.name ?? "—"}</td>
+                <td>{r.warehouse.name}</td>
+              </tr>
+              {expandedReturnId === r.id && (
+                <tr>
+                  <td colSpan={4} className="stock-expand-cell">
+                    <table className="stock-table">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {r.items.map((i) => (
+                          <tr key={i.id}>
+                            <td>
+                              {i.product.name} <span className="muted small">({i.product.sku})</span>
+                            </td>
+                            <td>{i.qty}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>

@@ -9,17 +9,28 @@ datasource db {
 
 enum UserRole {
   admin
-  cashier
+  staff
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole @default(cashier)
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(staff)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  stockLedgerEntries StockLedger[]    @relation("StockLedgerPerformedBy")
+  stockTransfers     StockTransfer[]  @relation("StockTransferPerformedBy")
+  invoices           Invoice[]        @relation("InvoiceCreatedBy")
+  purchases          Purchase[]       @relation("PurchaseCreatedBy")
+  returns            Return[]         @relation("ReturnCreatedBy")
+  supplierReturns    SupplierReturn[] @relation("SupplierReturnCreatedBy")
+  holdInvoices       HoldInvoice[]    @relation("HoldInvoiceCreatedBy")
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -32,11 +43,14 @@ model Warehouse {
   phone         String?
   isActive      Boolean  @default(true) @map("is_active")
 
-  stock          Stock[]
-  stockLedger    StockLedger[]
-  invoices       Invoice[]
-  purchases      Purchase[]
-  supplierReturns SupplierReturn[]
+  stock              Stock[]
+  stockLedger        StockLedger[]
+  invoices           Invoice[]
+  purchaseItems      PurchaseItem[]
+  supplierReturns    SupplierReturn[]
+  stockTransfersFrom StockTransfer[]  @relation("StockTransferFrom")
+  stockTransfersTo   StockTransfer[]  @relation("StockTransferTo")
+  holdInvoices       HoldInvoice[]
 
   @@map("warehouses")
 }
@@ -52,6 +66,10 @@ model Product {
   sellingPrice  Decimal  @map("selling_price") @db.Decimal(10, 2)
   taxPercent    Decimal  @default(0) @map("tax_percent") @db.Decimal(5, 2)
   imageUrl      String?  @map("image_url")
+  // Camera-captured/uploaded image, stored directly in the DB as a compressed
+  // (<=50KB) base64 data URI. Independent of imageUrl — a product uses one or
+  // the other; imageData takes display priority when both happen to be set.
+  imageData     String?  @map("image_data")
   unit          String   @default("pcs")
   isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -63,6 +81,8 @@ model Product {
   purchaseItems       PurchaseItem[]
   returnItems         ReturnItem[]
   supplierReturnItems SupplierReturnItem[]
+  stockTransfers      StockTransfer[]
+  holdInvoiceItems    HoldInvoiceItem[]
 
   @@index([barcode])
   @@map("products")
@@ -73,7 +93,16 @@ model Stock {
   productId       Int      @map("product_id")
   warehouseId     Int      @map("warehouse_id")
   quantity        Int      @default(0)
+  // Grand total damaged (unchanged meaning/usage everywhere else in the app).
   damagedQuantity Int      @default(0) @map("damaged_quantity")
+  // Subset of damagedQuantity that came from Damage on Transit (received
+  // already damaged, never entered `quantity`). The remainder
+  // (damagedQuantity - damagedQuantityTransit) is Damage on Showroom —
+  // covers mark-damaged, defective customer returns, and defective hold
+  // returns, i.e. everything that happened once the unit was already in
+  // showroom/shop inventory. Existing rows default to 0 here, so all
+  // pre-existing damaged stock is safely classified as Showroom.
+  damagedQuantityTransit Int @default(0) @map("damaged_quantity_transit")
   reorderLevel    Int      @default(0) @map("reorder_level")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -89,6 +118,8 @@ enum LedgerReferenceType {
   purchase
   adjustment
   return
+  transfer
+  hold
 }
 
 model StockLedger {
@@ -96,26 +127,85 @@ model StockLedger {
   productId     Int                 @map("product_id")
   warehouseId   Int                 @map("warehouse_id")
   changeQty     Int                 @map("change_qty")
+  previousQty   Int                 @map("previous_qty")
   balanceQty    Int                 @map("balance_qty")
   referenceType LedgerReferenceType @map("reference_type")
   referenceId   Int?                @map("reference_id")
+  performedById Int?                @map("performed_by_id")
+  reason        String?
   createdAt     DateTime            @default(now()) @map("created_at")
 
-  product   Product   @relation(fields: [productId], references: [id])
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  performedBy User?     @relation("StockLedgerPerformedBy", fields: [performedById], references: [id])
 
   @@map("stock_ledger")
+}
+
+model StockTransfer {
+  id              Int      @id @default(autoincrement())
+  productId       Int      @map("product_id")
+  fromWarehouseId Int      @map("from_warehouse_id")
+  toWarehouseId   Int      @map("to_warehouse_id")
+  qty             Int
+  fromPreviousQty Int      @map("from_previous_qty")
+  fromNewQty      Int      @map("from_new_qty")
+  toPreviousQty   Int      @map("to_previous_qty")
+  toNewQty        Int      @map("to_new_qty")
+  performedById   Int?     @map("performed_by_id")
+  reason          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  product       Product   @relation(fields: [productId], references: [id])
+  fromWarehouse Warehouse @relation("StockTransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse @relation("StockTransferTo", fields: [toWarehouseId], references: [id])
+  performedBy   User?     @relation("StockTransferPerformedBy", fields: [performedById], references: [id])
+
+  @@map("stock_transfers")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   Int?     @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Coupon {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique
+  discountPercent Decimal  @map("discount_percent") @db.Decimal(5, 2)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("coupons")
 }
 
 model Customer {
   id        Int      @id @default(autoincrement())
   name      String
-  phone     String?
+  // Doubles as the WhatsApp number — used to identify the same customer
+  // across purchases so billing never creates a duplicate record.
+  phone     String?  @unique
   email     String?
   gstNumber String?  @map("gst_number")
   address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  invoices Invoice[]
+  invoices     Invoice[]
+  holdInvoices HoldInvoice[]
 
   @@map("customers")
 }
@@ -133,22 +223,30 @@ enum PaymentMode {
 }
 
 model Invoice {
-  id            Int           @id @default(autoincrement())
-  invoiceNumber String        @unique @map("invoice_number")
-  customerId    Int?          @map("customer_id")
-  warehouseId   Int           @map("warehouse_id")
-  subtotal      Decimal       @db.Decimal(12, 2)
-  taxAmount     Decimal       @map("tax_amount") @db.Decimal(12, 2)
-  discount      Decimal       @default(0) @db.Decimal(12, 2)
-  grandTotal    Decimal       @map("grand_total") @db.Decimal(12, 2)
-  paymentMode   PaymentMode   @map("payment_mode")
-  status        InvoiceStatus @default(paid)
-  createdAt     DateTime      @default(now()) @map("created_at")
+  id                    Int           @id @default(autoincrement())
+  invoiceNumber         String        @unique @map("invoice_number")
+  customerId            Int?          @map("customer_id")
+  warehouseId           Int           @map("warehouse_id")
+  subtotal              Decimal       @db.Decimal(12, 2)
+  taxAmount             Decimal       @map("tax_amount") @db.Decimal(12, 2)
+  couponCode            String?       @map("coupon_code")
+  couponDiscountPercent Decimal?      @map("coupon_discount_percent") @db.Decimal(5, 2)
+  couponDiscountAmount  Decimal?      @map("coupon_discount_amount") @db.Decimal(12, 2)
+  grandTotal            Decimal       @map("grand_total") @db.Decimal(12, 2)
+  paymentMode           PaymentMode   @map("payment_mode")
+  status                InvoiceStatus @default(paid)
+  // Set only when this invoice was generated from a Hold Invoice — either the
+  // customer's "keep" decision, or an automatic expiry — never for a normal sale.
+  holdInvoiceId         Int?          @unique @map("hold_invoice_id")
+  createdById           Int?          @map("created_by_id")
+  createdAt             DateTime      @default(now()) @map("created_at")
 
-  customer  Customer?     @relation(fields: [customerId], references: [id])
-  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
-  items     InvoiceItem[]
-  returns   Return[]
+  customer    Customer?    @relation(fields: [customerId], references: [id])
+  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id])
+  createdBy   User?        @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  holdInvoice HoldInvoice? @relation(fields: [holdInvoiceId], references: [id])
+  items       InvoiceItem[]
+  returns     Return[]
 
   @@map("invoices")
 }
@@ -173,20 +271,76 @@ model InvoiceItem {
   @@map("invoice_items")
 }
 
+enum HoldStatus {
+  active
+  completed
+  returned
+  expired
+}
+
+// A temporary "hold" on SKUs a customer wants to check/try before deciding —
+// stock is deducted immediately when the hold is created (see stock.controller
+// createHoldInvoice) and only ever restored via the explicit return path, never
+// automatically. Kept entirely separate from Invoice/InvoiceItem; only produces
+// a real Invoice once the customer's decision is processed (or the hold expires).
+model HoldInvoice {
+  id           Int        @id @default(autoincrement())
+  holdNumber   String     @unique @map("hold_number")
+  customerId   Int?       @map("customer_id")
+  warehouseId  Int        @map("warehouse_id")
+  status       HoldStatus @default(active)
+  expiresAt    DateTime   @map("expires_at")
+  processedAt  DateTime?  @map("processed_at")
+  createdById  Int?       @map("created_by_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  customer     Customer?         @relation(fields: [customerId], references: [id])
+  warehouse    Warehouse         @relation(fields: [warehouseId], references: [id])
+  createdBy    User?             @relation("HoldInvoiceCreatedBy", fields: [createdById], references: [id])
+  items        HoldInvoiceItem[]
+  finalInvoice Invoice?
+
+  @@map("hold_invoices")
+}
+
+model HoldInvoiceItem {
+  id                 Int     @id @default(autoincrement())
+  holdInvoiceId      Int     @map("hold_invoice_id")
+  productId          Int     @map("product_id")
+  // Snapshotted at hold time, same convention as InvoiceItem, so pricing can't
+  // drift if the product's price changes while units are on hold.
+  qty                Int
+  mrp                Decimal @db.Decimal(10, 2)
+  price              Decimal @db.Decimal(10, 2)
+  taxPercent         Decimal @map("tax_percent") @db.Decimal(5, 2)
+  // Filled in only when the hold is processed (or auto-expired) — must always
+  // sum to `qty` once the hold is no longer "active".
+  keptQty            Int     @default(0) @map("kept_qty")
+  returnedNormalQty  Int     @default(0) @map("returned_normal_qty")
+  returnedDamagedQty Int     @default(0) @map("returned_damaged_qty")
+
+  holdInvoice HoldInvoice @relation(fields: [holdInvoiceId], references: [id])
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@map("hold_invoice_items")
+}
+
 enum ReturnReason {
   normal
   defective
 }
 
 model Return {
-  id            Int      @id @default(autoincrement())
-  returnNumber  String   @unique @map("return_number")
-  invoiceId     Int      @map("invoice_id")
-  totalRefund   Decimal  @map("total_refund") @db.Decimal(12, 2)
-  createdAt     DateTime @default(now()) @map("created_at")
+  id           Int      @id @default(autoincrement())
+  returnNumber String   @unique @map("return_number")
+  invoiceId    Int      @map("invoice_id")
+  totalRefund  Decimal  @map("total_refund") @db.Decimal(12, 2)
+  createdById  Int?     @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  invoice Invoice      @relation(fields: [invoiceId], references: [id])
-  items   ReturnItem[]
+  invoice   Invoice      @relation(fields: [invoiceId], references: [id])
+  createdBy User?        @relation("ReturnCreatedBy", fields: [createdById], references: [id])
+  items     ReturnItem[]
 
   @@map("returns")
 }
@@ -221,30 +375,35 @@ model Supplier {
 }
 
 model Purchase {
-  id              Int      @id @default(autoincrement())
-  purchaseNumber  String   @unique @map("purchase_number")
-  supplierId      Int?     @map("supplier_id")
-  warehouseId     Int      @map("warehouse_id")
-  totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             Int      @id @default(autoincrement())
+  purchaseNumber String   @unique @map("purchase_number")
+  supplierId     Int?     @map("supplier_id")
+  totalAmount    Decimal  @map("total_amount") @db.Decimal(12, 2)
+  createdById    Int?     @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   supplier  Supplier?      @relation(fields: [supplierId], references: [id])
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+  createdBy User?          @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
   items     PurchaseItem[]
 
   @@map("purchases")
 }
 
 model PurchaseItem {
-  id         Int     @id @default(autoincrement())
-  purchaseId Int     @map("purchase_id")
-  productId  Int     @map("product_id")
-  qty        Int
-  costPrice  Decimal @map("cost_price") @db.Decimal(10, 2)
-  lineTotal  Decimal @map("line_total") @db.Decimal(12, 2)
+  id          Int     @id @default(autoincrement())
+  purchaseId  Int     @map("purchase_id")
+  productId   Int     @map("product_id")
+  warehouseId Int     @map("warehouse_id")
+  qty         Int
+  // Units of this line that arrived damaged in transit — recorded for
+  // audit/traceability back to the PO, but never added to `qty`/normal stock.
+  damagedQty  Int     @default(0) @map("damaged_qty")
+  costPrice   Decimal @map("cost_price") @db.Decimal(10, 2)
+  lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
+  purchase  Purchase  @relation(fields: [purchaseId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
 
   @@map("purchase_items")
 }
@@ -254,10 +413,12 @@ model SupplierReturn {
   returnNumber String   @unique @map("return_number")
   supplierId   Int?     @map("supplier_id")
   warehouseId  Int      @map("warehouse_id")
+  createdById  Int?     @map("created_by_id")
   createdAt    DateTime @default(now()) @map("created_at")
 
   supplier  Supplier?            @relation(fields: [supplierId], references: [id])
   warehouse Warehouse            @relation(fields: [warehouseId], references: [id])
+  createdBy User?                @relation("SupplierReturnCreatedBy", fields: [createdById], references: [id])
   items     SupplierReturnItem[]
 
   @@map("supplier_returns")
