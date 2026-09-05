@@ -1271,6 +1271,43 @@ tr.current-warehouse:hover {
   font-weight: 700;
 }
 
+.charges-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.charges-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  font-weight: 800;
+}
+
+.charges-inputs {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.charges-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.charges-inputs input {
+  width: 140px;
+}
+
 .payment-mode {
   flex-direction: row;
   align-items: center;

@@ -299,6 +299,18 @@ export function InvoiceDetail() {
             <span>−₹{Number(invoice.couponDiscountAmount).toFixed(2)}</span>
           </div>
         )}
+        {Number(invoice.packagingCharge) > 0 && (
+          <div>
+            <span>Packaging Charges</span>
+            <span>₹{Number(invoice.packagingCharge).toFixed(2)}</span>
+          </div>
+        )}
+        {Number(invoice.transportCharge) > 0 && (
+          <div>
+            <span>Transport Charges</span>
+            <span>₹{Number(invoice.transportCharge).toFixed(2)}</span>
+          </div>
+        )}
         <div className="grand-total">
           <span>Grand Total</span>
           <span>₹{Number(invoice.grandTotal).toFixed(2)}</span>

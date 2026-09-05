@@ -232,6 +232,12 @@ model Invoice {
   couponCode            String?       @map("coupon_code")
   couponDiscountPercent Decimal?      @map("coupon_discount_percent") @db.Decimal(5, 2)
   couponDiscountAmount  Decimal?      @map("coupon_discount_amount") @db.Decimal(12, 2)
+  // Optional flat charges, entered manually at billing time — never taxed or
+  // discounted, added straight onto the grand total. 0 for every invoice that
+  // didn't use them (including all pre-existing invoices), so the line is
+  // simply omitted wherever it's displayed.
+  packagingCharge       Decimal       @default(0) @map("packaging_charge") @db.Decimal(10, 2)
+  transportCharge       Decimal       @default(0) @map("transport_charge") @db.Decimal(10, 2)
   grandTotal            Decimal       @map("grand_total") @db.Decimal(12, 2)
   paymentMode           PaymentMode   @map("payment_mode")
   status                InvoiceStatus @default(paid)

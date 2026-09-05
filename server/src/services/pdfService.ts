@@ -21,6 +21,8 @@ interface InvoicePdfData {
   couponCode?: string | null;
   couponDiscountPercent?: number | null;
   couponDiscountAmount?: number | null;
+  packagingCharge?: number;
+  transportCharge?: number;
   grandTotal: number;
   customer: { name: string; phone: string | null; gstNumber: string | null } | null;
   warehouse: { name: string; location: string | null };
@@ -101,6 +103,13 @@ function renderInvoicePdf(doc: PDFKit.PDFDocument, invoice: InvoicePdfData) {
   // Coupon row only appears when a coupon was actually applied to this invoice.
   if (invoice.couponCode && invoice.couponDiscountAmount) {
     totals.push([`Coupon (${invoice.couponCode}, ${invoice.couponDiscountPercent}%)`, -invoice.couponDiscountAmount]);
+  }
+  // Packaging/Transport rows only appear when actually entered on this invoice.
+  if (invoice.packagingCharge) {
+    totals.push(["Packaging Charges", invoice.packagingCharge]);
+  }
+  if (invoice.transportCharge) {
+    totals.push(["Transport Charges", invoice.transportCharge]);
   }
   for (const [label, value] of totals) {
     doc.text(label, 350, y, { width: 90, align: "right" });

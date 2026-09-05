@@ -15,6 +15,10 @@ const createInvoiceSchema = z.object({
   customerId: z.number().int().optional(),
   paymentMode: z.enum(["cash", "card", "upi"]),
   couponCode: z.string().trim().min(1).optional(),
+  // Optional flat charges — manually entered, never taxed/discounted. Left
+  // out entirely (defaulting to 0) when the cashier doesn't use them.
+  packagingCharge: z.number().nonnegative().default(0),
+  transportCharge: z.number().nonnegative().default(0),
   items: z
     .array(
       z.object({
@@ -97,7 +101,10 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
       couponDiscountAmount = subtotal.mul(found.discountPercent).div(100);
     }
 
-    const grandTotal = subtotal.add(taxAmount).sub(couponDiscountAmount);
+    const packagingCharge = new Prisma.Decimal(data.packagingCharge);
+    const transportCharge = new Prisma.Decimal(data.transportCharge);
+
+    const grandTotal = subtotal.add(taxAmount).sub(couponDiscountAmount).add(packagingCharge).add(transportCharge);
     if (grandTotal.isNegative()) {
       throw new ApiError(400, "Coupon discount cannot exceed subtotal plus tax");
     }
@@ -118,6 +125,8 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
               couponDiscountAmount,
             }
           : {}),
+        packagingCharge,
+        transportCharge,
         grandTotal,
         paymentMode: data.paymentMode,
         status: "paid",
@@ -443,6 +452,8 @@ async function loadInvoicePdfData(id: number) {
       couponCode: invoice.couponCode,
       couponDiscountPercent: invoice.couponDiscountPercent ? Number(invoice.couponDiscountPercent) : null,
       couponDiscountAmount: invoice.couponDiscountAmount ? Number(invoice.couponDiscountAmount) : null,
+      packagingCharge: Number(invoice.packagingCharge),
+      transportCharge: Number(invoice.transportCharge),
       grandTotal: Number(invoice.grandTotal),
       customer: invoice.customer
         ? { name: invoice.customer.name, phone: invoice.customer.phone, gstNumber: invoice.customer.gstNumber }
