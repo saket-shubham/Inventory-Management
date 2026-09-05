@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
   Layers,
   Pencil,
   Package,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import { ProductImageInput } from "../components/ProductImageInput";
+import { BulkImportPanel } from "../components/BulkImportPanel";
+import type { MappedImportRow } from "../utils/bulkImport";
 import type { Product, StockByWarehouse, Warehouse } from "../types";
 
 const emptyForm = {
@@ -96,6 +99,7 @@ export function AdminProducts() {
   );
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkSummary, setBulkSummary] = useState<string | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
 
   const [showInactive, setShowInactive] = useState(false);
   const [statusChangingId, setStatusChangingId] = useState<number | null>(null);
@@ -114,6 +118,8 @@ export function AdminProducts() {
   }, []);
 
   const defaultStockWarehouse = warehouses.find((w) => w.name === "Warehouse") ?? warehouses[0];
+  const existingBarcodes = new Set(products.map((p) => p.barcode));
+  const existingSkus = new Set(products.map((p) => p.sku));
 
   function applyTotalToSingleForm(value: string) {
     setStockTotal(value);
@@ -296,6 +302,40 @@ export function AdminProducts() {
 
   function removeBulkRow(id: number) {
     setBulkRows((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  // Turns confirmed import rows into the exact same BulkRow shape a manually
+  // typed row would have — from here on they're indistinguishable from
+  // hand-entered rows: same edit controls, same validation, same "Save all".
+  // Nothing is sent to the server here.
+  function handleImportConfirm(rows: MappedImportRow[]) {
+    const imported: BulkRow[] = rows.map((row) => {
+      const stockTotal = row.stockTotal.trim();
+      return {
+        id: nextBulkRowId(),
+        name: row.name,
+        sku: row.sku,
+        barcode: row.barcode,
+        category: row.category,
+        brand: row.brand,
+        mrp: row.mrp,
+        sellingPrice: row.sellingPrice,
+        taxPercent: row.taxPercent.trim() || "0",
+        unit: row.unit.trim() || "pcs",
+        imageUrl: row.imageUrl,
+        imageData: "",
+        stockTotal,
+        stockAllocations: stockTotal && defaultStockWarehouse ? { [defaultStockWarehouse.id]: stockTotal } : {},
+        stockAutoFilled: true,
+        error: row.errors.length > 0 ? row.errors.join("; ") : undefined,
+      };
+    });
+
+    setBulkRows((prev) => {
+      const kept = prev.filter((r) => r.name.trim() || r.barcode.trim());
+      return [...kept, ...imported];
+    });
+    setShowImportPanel(false);
   }
 
   async function handleBulkSubmit() {
@@ -555,9 +595,16 @@ export function AdminProducts() {
       </form>
 
       <div className="admin-form">
-        <h3>
-          <Layers size={16} /> Bulk add products
-        </h3>
+        <div className="section-header">
+          <h3 style={{ marginBottom: 0 }}>
+            <Layers size={16} /> Bulk add products
+          </h3>
+          {!showImportPanel && (
+            <button type="button" className="link-button" onClick={() => setShowImportPanel(true)}>
+              <FileSpreadsheet size={14} /> Import from Excel/CSV
+            </button>
+          )}
+        </div>
         <p className="help-text">
           Add several products at once — fill in as many rows as you need. Leave <strong>SKU</strong> blank to
           auto-generate one. For stock, just fill <strong>Total</strong> — it defaults entirely to{" "}
@@ -565,6 +612,15 @@ export function AdminProducts() {
           columns yourself. Rows that fail (e.g. duplicate barcode) stay in the table with the reason shown, so you
           only need to fix and resubmit those.
         </p>
+
+        {showImportPanel && (
+          <BulkImportPanel
+            existingBarcodes={existingBarcodes}
+            existingSkus={existingSkus}
+            onConfirm={handleImportConfirm}
+            onClose={() => setShowImportPanel(false)}
+          />
+        )}
 
         <div className="bulk-table-wrap">
           <table className="cart-table bulk-table">

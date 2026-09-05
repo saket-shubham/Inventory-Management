@@ -175,6 +175,8 @@ export interface HoldInvoiceItem {
   mrp: string;
   price: string;
   taxPercent: string;
+  // Filled in only when the hold is processed (or auto-expired) — must always
+  // sum to `qty` once the hold is no longer "active".
   keptQty: number;
   returnedNormalQty: number;
   returnedDamagedQty: number;

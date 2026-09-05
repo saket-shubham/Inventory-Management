@@ -41,15 +41,12 @@ export function HoldInvoiceDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (!hold) return <div className="page-loading">Loading hold invoice...</div>;
+  if (!hold) return <div className="page-loading">Loading...</div>;
 
   function updateDecision(itemId: number, field: keyof DecisionRow, value: string) {
     setDecisions((prev) => {
       const current = prev[itemId] ?? { keep: "0", returnNormal: "0", returnDamaged: "0" };
       const updated: DecisionRow = { ...current, [field]: value };
-
-      // Returning a unit should free you from also having to go edit Keep —
-      // it drops automatically so the row balances itself.
       if (field === "returnNormal" || field === "returnDamaged") {
         const item = hold?.items.find((i) => i.id === itemId);
         if (item) {
@@ -58,7 +55,6 @@ export function HoldInvoiceDetail() {
           updated.keep = String(Math.max(0, item.qty - returnNormal - returnDamaged));
         }
       }
-
       return { ...prev, [itemId]: updated };
     });
   }
@@ -117,7 +113,7 @@ export function HoldInvoiceDetail() {
         </div>
         {hold.finalInvoice && (
           <Link to={`/invoices/${hold.finalInvoice.id}`} className="button-link">
-            View final invoice ({hold.finalInvoice.invoiceNumber})
+            Invoice {hold.finalInvoice.invoiceNumber}
           </Link>
         )}
       </div>

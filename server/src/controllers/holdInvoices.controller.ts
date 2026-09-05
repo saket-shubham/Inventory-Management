@@ -11,6 +11,8 @@ import { sweepExpiredHolds } from "../services/holdExpiry";
 
 const HOLD_VALIDITY_DAYS = 3;
 
+const holdItemsInclude = { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true } as const;
+
 const createHoldSchema = z.object({
   warehouseId: z.number().int(),
   customerId: z.number().int().optional(),
@@ -73,11 +75,11 @@ export const createHoldInvoice = asyncHandler(async (req: Request, res: Response
           }),
         },
       },
-      include: { items: { include: { product: true } }, customer: true, warehouse: true },
+      include: holdItemsInclude,
     });
 
-    // Deduct held quantities from available stock immediately — they can't be
-    // sold to anyone else while on hold.
+    // Deduct held quantities from available stock immediately — they can't
+    // be sold to anyone else while on hold.
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
       const previousQty = stock.quantity;
@@ -124,8 +126,8 @@ export const listHoldInvoices = asyncHandler(async (req: Request, res: Response)
       : undefined;
 
   const holds = await prisma.holdInvoice.findMany({
-    where: status ? { status } : undefined,
-    include: { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true },
+    where: status ? { status } : {},
+    include: holdItemsInclude,
     orderBy: { createdAt: "desc" },
     take: 200,
   });
@@ -138,9 +140,10 @@ export const getHoldInvoice = asyncHandler(async (req: Request, res: Response) =
 
   const hold = await prisma.holdInvoice.findUnique({
     where: { id },
-    include: { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true },
+    include: holdItemsInclude,
   });
   if (!hold) throw new ApiError(404, "Hold invoice not found");
+
   res.json(hold);
 });
 
@@ -325,7 +328,7 @@ export const processHoldInvoice = asyncHandler(async (req: Request, res: Respons
 
     return tx.holdInvoice.findUniqueOrThrow({
       where: { id: hold.id },
-      include: { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true },
+      include: holdItemsInclude,
     });
   });
 

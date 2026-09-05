@@ -13,7 +13,9 @@ export function HoldInvoices() {
   async function loadHolds() {
     setLoading(true);
     try {
-      const res = await api.get<HoldInvoice[]>("/hold-invoices", { params: status ? { status } : {} });
+      const res = await api.get<HoldInvoice[]>("/hold-invoices", {
+        params: status ? { status } : {},
+      });
       setHolds(res.data);
     } finally {
       setLoading(false);
@@ -56,7 +58,7 @@ export function HoldInvoices() {
               <th>Hold #</th>
               <th>Date</th>
               <th>Warehouse</th>
-              <th>Customer</th>
+              <th>Customer / Dealer</th>
               <th>Items</th>
               <th>Expires</th>
               <th>Status</th>
