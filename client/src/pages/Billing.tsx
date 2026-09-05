@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, CheckCircle2, PauseCircle, ScanLine, ShoppingCart, Tag, TriangleAlert, X } from "lucide-react";
+import { Camera, CheckCircle2, Package, PauseCircle, ScanLine, ShoppingCart, Tag, TriangleAlert, X } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import { useCart } from "../context/CartContext";
 import { ScanInput } from "../components/ScanInput";
@@ -37,6 +37,11 @@ export function Billing() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponChecking, setCouponChecking] = useState(false);
+
+  // Optional, manually entered flat charges — left blank unless the cashier
+  // types something, never taxed/discounted, added straight onto the total.
+  const [packagingChargeInput, setPackagingChargeInput] = useState("");
+  const [transportChargeInput, setTransportChargeInput] = useState("");
 
   useEffect(() => {
     api.get("/warehouses").then((res) => {
@@ -134,6 +139,16 @@ export function Billing() {
 
   const couponDiscountAmount = appliedCoupon ? (cart.subtotal * appliedCoupon.discountPercent) / 100 : 0;
 
+  // Empty/invalid/negative all safely collapse to "not charged" — never lets
+  // a bad value slip into the total.
+  function parseCharge(input: string): number {
+    const n = Number(input);
+    return input.trim() !== "" && Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  const packagingCharge = parseCharge(packagingChargeInput);
+  const transportCharge = parseCharge(transportChargeInput);
+
   async function handleGenerateInvoice() {
     if (!cart.warehouseId || cart.lines.length === 0) return;
     setSubmitting(true);
@@ -145,6 +160,8 @@ export function Billing() {
         customerId,
         paymentMode,
         ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
+        packagingCharge,
+        transportCharge,
         items: cart.lines.map((l) => ({
           productId: l.product.id,
           qty: l.qty,
@@ -155,6 +172,8 @@ export function Billing() {
       cart.clear();
       setSelectedCustomer(null);
       removeCoupon();
+      setPackagingChargeInput("");
+      setTransportChargeInput("");
       navigate(`/invoices/${res.data.id}`);
     } catch (err) {
       setSubmitError(apiErrorMessage(err));
@@ -185,7 +204,7 @@ export function Billing() {
     }
   }
 
-  const grandTotal = cart.grandTotal(couponDiscountAmount);
+  const grandTotal = cart.grandTotal(couponDiscountAmount) + packagingCharge + transportCharge;
 
   return (
     <div className="billing-page">
@@ -341,6 +360,36 @@ export function Billing() {
           )}
         </div>
 
+        <div className="charges-section">
+          <h3>
+            <Package size={14} /> Additional charges (optional)
+          </h3>
+          <div className="charges-inputs">
+            <label>
+              Packaging Charges
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={packagingChargeInput}
+                onChange={(e) => setPackagingChargeInput(e.target.value)}
+              />
+            </label>
+            <label>
+              Transport Charges
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={transportChargeInput}
+                onChange={(e) => setTransportChargeInput(e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="invoice-totals">
           <div>
             <span>Subtotal</span>
@@ -354,6 +403,18 @@ export function Billing() {
             <div>
               <span>Coupon ({appliedCoupon.code})</span>
               <span>−₹{couponDiscountAmount.toFixed(2)}</span>
+            </div>
+          )}
+          {packagingCharge > 0 && (
+            <div>
+              <span>Packaging Charges</span>
+              <span>₹{packagingCharge.toFixed(2)}</span>
+            </div>
+          )}
+          {transportCharge > 0 && (
+            <div>
+              <span>Transport Charges</span>
+              <span>₹{transportCharge.toFixed(2)}</span>
             </div>
           )}
           <div className="grand-total">

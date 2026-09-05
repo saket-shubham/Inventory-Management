@@ -148,6 +148,8 @@ export interface Invoice {
   couponCode: string | null;
   couponDiscountPercent: string | null;
   couponDiscountAmount: string | null;
+  packagingCharge: string;
+  transportCharge: string;
   grandTotal: string;
   paymentMode: PaymentMode;
   status: "draft" | "paid" | "cancelled";

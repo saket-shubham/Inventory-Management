@@ -1,0 +1,2 @@
+ALTER TABLE "invoices" ADD COLUMN "packaging_charge" DECIMAL(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE "invoices" ADD COLUMN "transport_charge" DECIMAL(10,2) NOT NULL DEFAULT 0;
