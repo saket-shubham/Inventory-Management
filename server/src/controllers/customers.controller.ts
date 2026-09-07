@@ -9,9 +9,9 @@ export const listCustomers = asyncHandler(async (req: Request, res: Response) =>
     where: search
       ? {
           OR: [
-            { name: { contains: search } },
+            { name: { contains: search, mode: "insensitive" } },
             { phone: { contains: search } },
-            { email: { contains: search } },
+            { email: { contains: search, mode: "insensitive" } },
           ],
         }
       : undefined,

@@ -3,12 +3,13 @@ import {
   cancelInvoice,
   createInvoice,
   createReturn,
+  deleteInvoice,
   downloadInvoicePdf,
   getInvoice,
   listInvoices,
   sendInvoiceEmailNow,
 } from "../controllers/invoices.controller";
-import { authenticate } from "../middleware/auth";
+import { authenticate, authorize } from "../middleware/auth";
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.get("/", authenticate, listInvoices);
 router.get("/:id", authenticate, getInvoice);
 router.get("/:id/pdf", authenticate, downloadInvoicePdf);
 router.post("/:id/cancel", authenticate, cancelInvoice);
+router.delete("/:id", authenticate, authorize("admin"), deleteInvoice);
 router.post("/:id/return", authenticate, createReturn);
 router.post("/:id/send-email", authenticate, sendInvoiceEmailNow);
 

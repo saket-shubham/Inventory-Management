@@ -18,6 +18,13 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
+  // body-parser's own error for a request over the express.json() size limit
+  // — surfaced as a clear message instead of falling through to a generic 500.
+  if (typeof err === "object" && err !== null && "type" in err && (err as { type?: string }).type === "entity.too.large") {
+    res.status(413).json({ error: "Request is too large — try saving fewer rows/images at once" });
+    return;
+  }
+
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 }
