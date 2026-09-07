@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, CheckCircle2, Package, PauseCircle, ScanLine, ShoppingCart, Tag, TriangleAlert, X } from "lucide-react";
+import { Banknote, Camera, CheckCircle2, CreditCard, Package, PauseCircle, ScanLine, ShoppingCart, Smartphone, Tag, TriangleAlert, X } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import { useCart } from "../context/CartContext";
 import { ScanInput } from "../components/ScanInput";
@@ -423,14 +423,35 @@ export function Billing() {
           </div>
         </div>
 
-        <label className="payment-mode">
-          Payment mode
-          <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as PaymentMode)}>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="upi">UPI</option>
-          </select>
-        </label>
+        <div className="payment-selector">
+          <div className="payment-selector-title">Payment Method</div>
+          <div className="payment-mode-cards">
+            <button
+              type="button"
+              className={`payment-card-btn${paymentMode === "cash" ? " active" : ""}`}
+              onClick={() => setPaymentMode("cash")}
+            >
+              <Banknote size={18} />
+              <span>Cash</span>
+            </button>
+            <button
+              type="button"
+              className={`payment-card-btn${paymentMode === "card" ? " active" : ""}`}
+              onClick={() => setPaymentMode("card")}
+            >
+              <CreditCard size={18} />
+              <span>Card</span>
+            </button>
+            <button
+              type="button"
+              className={`payment-card-btn${paymentMode === "upi" ? " active" : ""}`}
+              onClick={() => setPaymentMode("upi")}
+            >
+              <Smartphone size={18} />
+              <span>UPI / QR</span>
+            </button>
+          </div>
+        </div>
 
         {submitError && <p className="error-text">{submitError}</p>}
         {holdError && (
@@ -438,14 +459,15 @@ export function Billing() {
             <TriangleAlert size={14} /> {holdError}
           </p>
         )}
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <button
             type="button"
             className="primary"
+            style={{ flex: 1, padding: "13px 20px", fontSize: "15px" }}
             disabled={cart.lines.length === 0 || submitting || holding}
             onClick={handleGenerateInvoice}
           >
-            {submitting ? "Generating..." : "Generate Invoice"}
+            {submitting ? "Processing..." : `Generate Invoice (₹${grandTotal.toFixed(2)})`}
           </button>
           <button
             type="button"
@@ -454,7 +476,7 @@ export function Billing() {
             onClick={handleHold}
             title="Move these items to Hold instead of billing them now"
           >
-            <PauseCircle size={15} /> {holding ? "Holding..." : "Hold"}
+            <PauseCircle size={16} /> {holding ? "Holding..." : "Hold"}
           </button>
         </div>
       </section>

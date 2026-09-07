@@ -100,58 +100,73 @@ export function Dashboard() {
       <div className="dashboard-grid">
         <div className="dashboard-panel">
           <h3>Top Selling Products (this month)</h3>
-          <table className="cart-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Qty sold</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.topProducts.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="muted">
-                    No sales yet this month.
-                  </td>
-                </tr>
-              )}
-              {summary.topProducts.map((p) => (
-                <tr key={p.productId}>
-                  <td>
-                    {p.productName} <span className="muted small">({p.sku})</span>
-                  </td>
-                  <td>{p.qtySold}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {summary.topProducts.length === 0 ? (
+            <p className="muted" style={{ padding: "16px 0", textAlign: "center" }}>
+              No sales yet this month.
+            </p>
+          ) : (
+            (() => {
+              const maxQty = Math.max(...summary.topProducts.map((p) => p.qtySold), 1);
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 12 }}>
+                  {summary.topProducts.map((p) => (
+                    <div key={p.productId} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 600, fontSize: "13.5px" }}>
+                          {p.productName} <span className="muted small">({p.sku})</span>
+                        </span>
+                        <span className="num" style={{ fontWeight: 700, color: "var(--brand-700)" }}>
+                          {p.qtySold} sold
+                        </span>
+                      </div>
+                      <div className="dashboard-progress-track">
+                        <div
+                          className="dashboard-progress-fill"
+                          style={{ width: `${Math.round((p.qtySold / maxQty) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()
+          )}
         </div>
 
         <div className="dashboard-panel">
           <h3>Sales by Warehouse (this month)</h3>
-          <table className="cart-table">
-            <thead>
-              <tr>
-                <th>Warehouse</th>
-                <th>Total sales</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.salesByWarehouse.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="muted">
-                    No sales yet this month.
-                  </td>
-                </tr>
-              )}
-              {summary.salesByWarehouse.map((w) => (
-                <tr key={w.warehouseId}>
-                  <td>{w.warehouseName}</td>
-                  <td>₹{Number(w.totalSales).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {summary.salesByWarehouse.length === 0 ? (
+            <p className="muted" style={{ padding: "16px 0", textAlign: "center" }}>
+              No sales yet this month.
+            </p>
+          ) : (
+            (() => {
+              const maxSales = Math.max(...summary.salesByWarehouse.map((w) => Number(w.totalSales)), 1);
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 12 }}>
+                  {summary.salesByWarehouse.map((w) => {
+                    const salesVal = Number(w.totalSales);
+                    return (
+                      <div key={w.warehouseId} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 600, fontSize: "13.5px" }}>{w.warehouseName}</span>
+                          <span className="num" style={{ fontWeight: 700, color: "var(--success-dark)" }}>
+                            ₹{salesVal.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="dashboard-progress-track">
+                          <div
+                            className="dashboard-progress-fill success"
+                            style={{ width: `${Math.round((salesVal / maxSales) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          )}
         </div>
       </div>
 
