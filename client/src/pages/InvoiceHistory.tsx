@@ -68,49 +68,73 @@ export function InvoiceHistory() {
       </form>
 
       {loading ? (
-        <p className="muted">Loading...</p>
+        <div className="page-loading">Loading invoices...</div>
       ) : (
-        <table className="cart-table">
-          <thead>
-            <tr>
-              <th>Invoice #</th>
-              <th>Date</th>
-              <th>Warehouse</th>
-              <th>Customer</th>
-              <th>Items</th>
-              <th>Grand Total</th>
-              <th>Payment</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => (
-              <tr key={inv.id}>
-                <td>
-                  <Link to={`/invoices/${inv.id}`} className="invoice-number-link">
-                    <ReceiptText size={14} /> {inv.invoiceNumber}
-                  </Link>
-                </td>
-                <td>{new Date(inv.createdAt).toLocaleDateString()}</td>
-                <td>{inv.warehouse.name}</td>
-                <td>{inv.customerNameSnapshot ?? inv.customer?.name ?? "Walk-in"}</td>
-                <td>{inv.items.length}</td>
-                <td>₹{Number(inv.grandTotal).toFixed(2)}</td>
-                <td>{inv.paymentMode.toUpperCase()}</td>
-                <td>
-                  <StatusBadge status={inv.status} />
-                </td>
-              </tr>
-            ))}
-            {invoices.length === 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <table className="cart-table">
+            <thead>
               <tr>
-                <td colSpan={8} className="muted">
-                  No invoices found.
-                </td>
+                <th>Invoice #</th>
+                <th>Date</th>
+                <th>Warehouse</th>
+                <th>Customer</th>
+                <th className="num text-center">Items</th>
+                <th className="num text-right">Grand Total</th>
+                <th className="text-center">Payment</th>
+                <th className="text-center">Status</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr key={inv.id}>
+                  <td>
+                    <Link to={`/invoices/${inv.id}`} className="invoice-number-link">
+                      <ReceiptText size={14} /> {inv.invoiceNumber}
+                    </Link>
+                  </td>
+                  <td className="muted small">{new Date(inv.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</td>
+                  <td>
+                    <span style={{ fontWeight: 600 }}>{inv.warehouse.name}</span>
+                  </td>
+                  <td>{inv.customerNameSnapshot ?? inv.customer?.name ?? <span className="muted">Walk-in</span>}</td>
+                  <td className="num text-center">
+                    <span className="sidebar-badge" style={{ fontSize: "11px" }}>
+                      {inv.items.length}
+                    </span>
+                  </td>
+                  <td className="num text-right" style={{ fontWeight: 700, color: "var(--brand-700)" }}>
+                    ₹{Number(inv.grandTotal).toFixed(2)}
+                  </td>
+                  <td className="text-center">
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "2px 8px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        background: "var(--chip-bg)",
+                        border: "1px solid var(--border-soft)",
+                      }}
+                    >
+                      {inv.paymentMode.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="text-center">
+                    <StatusBadge status={inv.status} />
+                  </td>
+                </tr>
+              ))}
+              {invoices.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="muted" style={{ textAlign: "center", padding: "36px 16px" }}>
+                    No invoices match your search filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
