@@ -138,19 +138,34 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
 
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
-      const previousQty = stock.quantity;
-      const newQty = previousQty - item.qty;
-      await tx.stock.update({
-        where: { id: stock.id },
-        data: { quantity: newQty },
+      const product = productMap.get(item.productId)!;
+
+      // Atomic check-and-deduct: the WHERE clause re-verifies availability at
+      // the database level, at the instant of the write — not against the
+      // stale `stockMap` read from earlier in this transaction. Two
+      // concurrent sales of the same last unit can no longer both succeed,
+      // and neither can silently overwrite the other's deduction.
+      const result = await tx.stock.updateMany({
+        where: { id: stock.id, quantity: { gte: item.qty } },
+        data: { quantity: { decrement: item.qty } },
       });
+      if (result.count === 0) {
+        throw new ApiError(400, `Insufficient stock for "${product.name}" — someone else may have just sold it`);
+      }
+
+      const updatedStock = await tx.stock.findUniqueOrThrow({
+        where: { id: stock.id },
+        select: { quantity: true },
+      });
+      const previousQty = updatedStock.quantity + item.qty;
+
       await tx.stockLedger.create({
         data: {
           productId: item.productId,
           warehouseId: data.warehouseId,
           changeQty: -item.qty,
           previousQty,
-          balanceQty: newQty,
+          balanceQty: updatedStock.quantity,
           referenceType: "invoice",
           referenceId: created.id,
           performedById: actor.id,
@@ -201,17 +216,19 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
       const returnable = item.qty - item.returnedQty;
       if (returnable <= 0) continue;
 
-      const stock = await tx.stock.findUnique({
-        where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
-      });
-      const previousQty = stock?.quantity ?? 0;
-      const newQty = previousQty + returnable;
-
+      // Restocking is a pure add-back — no availability check needed, just
+      // an atomic increment so a concurrent cancel/return on the same
+      // product can never overwrite this one's credit (or vice versa).
       await tx.stock.upsert({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
-        update: { quantity: newQty },
-        create: { productId: item.productId, warehouseId: invoice.warehouseId, quantity: newQty, reorderLevel: 0 },
+        update: { quantity: { increment: returnable } },
+        create: { productId: item.productId, warehouseId: invoice.warehouseId, quantity: returnable, reorderLevel: 0 },
       });
+      const updatedStock = await tx.stock.findUniqueOrThrow({
+        where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
+        select: { quantity: true },
+      });
+      const previousQty = updatedStock.quantity - returnable;
 
       await tx.stockLedger.create({
         data: {
@@ -219,7 +236,7 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
           warehouseId: invoice.warehouseId,
           changeQty: returnable,
           previousQty,
-          balanceQty: newQty,
+          balanceQty: updatedStock.quantity,
           referenceType: "invoice",
           referenceId: invoice.id,
           performedById: actor.id,
@@ -359,30 +376,29 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
         data: { returnedQty: { increment: reqItem.qty } },
       });
 
-      const stock = await tx.stock.findUnique({
-        where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
-      });
-
       if (reqItem.reason === "normal") {
-        const previousQty = stock?.quantity ?? 0;
-        const newQty = previousQty + reqItem.qty;
         await tx.stock.upsert({
           where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
-          update: { quantity: newQty },
+          update: { quantity: { increment: reqItem.qty } },
           create: {
             productId: invoiceItem.productId,
             warehouseId: invoice.warehouseId,
-            quantity: newQty,
+            quantity: reqItem.qty,
             reorderLevel: 0,
           },
         });
+        const updatedStock = await tx.stock.findUniqueOrThrow({
+          where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
+          select: { quantity: true },
+        });
+        const previousQty = updatedStock.quantity - reqItem.qty;
         await tx.stockLedger.create({
           data: {
             productId: invoiceItem.productId,
             warehouseId: invoice.warehouseId,
             changeQty: reqItem.qty,
             previousQty,
-            balanceQty: newQty,
+            balanceQty: updatedStock.quantity,
             referenceType: "return",
             referenceId: createdReturn.id,
             performedById: actor.id,
@@ -390,14 +406,13 @@ export const createReturn = asyncHandler(async (req: Request, res: Response) => 
           },
         });
       } else {
-        const newDamagedQty = (stock?.damagedQuantity ?? 0) + reqItem.qty;
         await tx.stock.upsert({
           where: { productId_warehouseId: { productId: invoiceItem.productId, warehouseId: invoice.warehouseId } },
-          update: { damagedQuantity: newDamagedQty },
+          update: { damagedQuantity: { increment: reqItem.qty } },
           create: {
             productId: invoiceItem.productId,
             warehouseId: invoice.warehouseId,
-            damagedQuantity: newDamagedQty,
+            damagedQuantity: reqItem.qty,
             reorderLevel: 0,
           },
         });

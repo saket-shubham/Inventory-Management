@@ -77,19 +77,34 @@ export const createHoldInvoice = asyncHandler(async (req: Request, res: Response
     });
 
     // Deduct held quantities from available stock immediately — they can't be
-    // sold to anyone else while on hold.
+    // sold to anyone else while on hold. Atomic check-and-deduct: the WHERE
+    // re-verifies availability at write time, not against the stale
+    // `stockMap` read from earlier in this transaction.
     for (const item of data.items) {
       const stock = stockMap.get(item.productId)!;
-      const previousQty = stock.quantity;
-      const newQty = previousQty - item.qty;
-      await tx.stock.update({ where: { id: stock.id }, data: { quantity: newQty } });
+      const product = productMap.get(item.productId)!;
+
+      const result = await tx.stock.updateMany({
+        where: { id: stock.id, quantity: { gte: item.qty } },
+        data: { quantity: { decrement: item.qty } },
+      });
+      if (result.count === 0) {
+        throw new ApiError(400, `Insufficient stock for "${product.name}" — someone else may have just sold it`);
+      }
+
+      const updatedStock = await tx.stock.findUniqueOrThrow({
+        where: { id: stock.id },
+        select: { quantity: true },
+      });
+      const previousQty = updatedStock.quantity + item.qty;
+
       await tx.stockLedger.create({
         data: {
           productId: item.productId,
           warehouseId: data.warehouseId,
           changeQty: -item.qty,
           previousQty,
-          balanceQty: newQty,
+          balanceQty: updatedStock.quantity,
           referenceType: "hold",
           referenceId: created.id,
           performedById: actor.id,
@@ -198,12 +213,6 @@ export const processHoldInvoice = asyncHandler(async (req: Request, res: Respons
       }
     }
 
-    const productIds = data.items.map((l) => itemMap.get(l.holdInvoiceItemId)!.productId);
-    const stockRows = await tx.stock.findMany({
-      where: { warehouseId: hold.warehouseId, productId: { in: productIds } },
-    });
-    const stockMap = new Map(stockRows.map((s) => [s.productId, s]));
-
     let subtotal = new Prisma.Decimal(0);
     let taxAmount = new Prisma.Decimal(0);
     const keptInvoiceItems: Array<{
@@ -244,20 +253,19 @@ export const processHoldInvoice = asyncHandler(async (req: Request, res: Respons
 
       const returnedQty = line.returnNormalQty + line.returnDamagedQty;
       if (returnedQty > 0) {
-        const stock = stockMap.get(item.productId);
-        const previousQty = stock?.quantity ?? 0;
-        const previousDamagedQty = stock?.damagedQuantity ?? 0;
-        const newQty = previousQty + line.returnNormalQty;
-        const newDamagedQty = previousDamagedQty + line.returnDamagedQty;
-
+        // Atomic increments — a concurrent settlement/return touching the
+        // same product can never overwrite this one's credit.
         await tx.stock.upsert({
           where: { productId_warehouseId: { productId: item.productId, warehouseId: hold.warehouseId } },
-          update: { quantity: newQty, damagedQuantity: newDamagedQty },
+          update: {
+            quantity: { increment: line.returnNormalQty },
+            damagedQuantity: { increment: line.returnDamagedQty },
+          },
           create: {
             productId: item.productId,
             warehouseId: hold.warehouseId,
-            quantity: newQty,
-            damagedQuantity: newDamagedQty,
+            quantity: line.returnNormalQty,
+            damagedQuantity: line.returnDamagedQty,
             reorderLevel: 0,
           },
         });
@@ -266,13 +274,18 @@ export const processHoldInvoice = asyncHandler(async (req: Request, res: Respons
         // damaged portion follows the same convention as customer returns
         // and mark-damaged: tracked via Stock.damagedQuantity, no ledger row.
         if (line.returnNormalQty > 0) {
+          const updatedStock = await tx.stock.findUniqueOrThrow({
+            where: { productId_warehouseId: { productId: item.productId, warehouseId: hold.warehouseId } },
+            select: { quantity: true },
+          });
+          const previousQty = updatedStock.quantity - line.returnNormalQty;
           await tx.stockLedger.create({
             data: {
               productId: item.productId,
               warehouseId: hold.warehouseId,
               changeQty: line.returnNormalQty,
               previousQty,
-              balanceQty: newQty,
+              balanceQty: updatedStock.quantity,
               referenceType: "return",
               referenceId: hold.id,
               performedById: actor.id,
