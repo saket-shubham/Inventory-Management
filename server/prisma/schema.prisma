@@ -182,6 +182,20 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// Backs every document-number generator (invoice/hold/return/purchase/
+// supplier-return) with one atomic, race-safe counter per (type, year) —
+// replaces the old "COUNT(*) + 1" approach, which two concurrent requests
+// could both read identically, and which broke permanently the moment any
+// row was ever deleted. This counter only ever moves forward.
+model DocumentCounter {
+  documentType String @map("document_type")
+  year         Int
+  lastNumber   Int    @default(0) @map("last_number")
+
+  @@id([documentType, year])
+  @@map("document_counters")
+}
+
 model Coupon {
   id              Int      @id @default(autoincrement())
   code            String   @unique

@@ -195,11 +195,17 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
     }
 
     for (const item of invoice.items) {
+      // Only the portion never returned goes back to stock here — anything
+      // already returned was already restocked (or quarantined as damaged)
+      // by the return itself, and must not be credited a second time.
+      const returnable = item.qty - item.returnedQty;
+      if (returnable <= 0) continue;
+
       const stock = await tx.stock.findUnique({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
       });
       const previousQty = stock?.quantity ?? 0;
-      const newQty = previousQty + item.qty;
+      const newQty = previousQty + returnable;
 
       await tx.stock.upsert({
         where: { productId_warehouseId: { productId: item.productId, warehouseId: invoice.warehouseId } },
@@ -211,7 +217,7 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
         data: {
           productId: item.productId,
           warehouseId: invoice.warehouseId,
-          changeQty: item.qty,
+          changeQty: returnable,
           previousQty,
           balanceQty: newQty,
           referenceType: "invoice",
@@ -240,6 +246,44 @@ export const cancelInvoice = asyncHandler(async (req: Request, res: Response) =>
   });
 
   res.json(updated);
+});
+
+// Admin-only, permanent removal — distinct from cancelInvoice, which is the
+// reversible business operation (restocks items, keeps the record as
+// "cancelled" for the audit trail). Delete only ever removes database rows;
+// it never touches Stock/StockLedger, since by the time an invoice is
+// cancelled its stock effects (and any prior returns') are already correctly
+// reflected in inventory and must not be adjusted again.
+export const deleteInvoice = asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const actor = req.user!;
+
+  await prisma.$transaction(async (tx) => {
+    const invoice = await tx.invoice.findUnique({ where: { id } });
+    if (!invoice) throw new ApiError(404, "Invoice not found");
+    if (invoice.status === "paid") {
+      throw new ApiError(400, "Cancel this invoice before deleting it");
+    }
+
+    const returns = await tx.return.findMany({ where: { invoiceId: id }, select: { id: true } });
+    const returnIds = returns.map((r) => r.id);
+    if (returnIds.length > 0) {
+      await tx.returnItem.deleteMany({ where: { returnId: { in: returnIds } } });
+      await tx.return.deleteMany({ where: { id: { in: returnIds } } });
+    }
+    await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
+    await tx.invoice.delete({ where: { id } });
+
+    await recordAudit(tx, {
+      userId: actor.id,
+      action: "INVOICE_DELETED",
+      entityType: "Invoice",
+      entityId: id,
+      metadata: { invoiceNumber: invoice.invoiceNumber, warehouseId: invoice.warehouseId },
+    });
+  });
+
+  res.status(204).send();
 });
 
 const createReturnSchema = z.object({

@@ -8,6 +8,7 @@ export type AuditAction =
   | "DAMAGE"
   | "SALE"
   | "INVOICE_CANCELLED"
+  | "INVOICE_DELETED"
   | "RETURN"
   | "SUPPLIER_RETURN"
   | "PRODUCT_CREATED"

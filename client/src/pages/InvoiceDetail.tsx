@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Ban, CheckCircle2, Download, Mail, MessageCircle, PlusCircle, RotateCcw, TriangleAlert } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Ban, CheckCircle2, Download, Mail, MessageCircle, PlusCircle, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
 import { api, apiErrorMessage } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../context/AuthContext";
 import type { Invoice, ReturnReason } from "../types";
 
 // wa.me needs the full international number, no "+", no spaces/dashes.
@@ -15,10 +16,16 @@ function toWhatsAppNumber(phone: string): string {
 
 export function InvoiceDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailResult, setEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -72,6 +79,19 @@ export function InvoiceDetail() {
       setCancelError(apiErrorMessage(err));
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/invoices/${invoice!.id}`);
+      navigate("/invoices");
+    } catch (err) {
+      setDeleteError(apiErrorMessage(err));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -148,6 +168,11 @@ export function InvoiceDetail() {
               <Ban size={15} /> Cancel invoice
             </button>
           )}
+          {user?.role === "admin" && invoice.status === "cancelled" && !confirmingDelete && (
+            <button type="button" className="danger-button" onClick={() => setConfirmingDelete(true)}>
+              <Trash2 size={15} /> Delete invoice
+            </button>
+          )}
         </div>
       </div>
 
@@ -163,6 +188,25 @@ export function InvoiceDetail() {
               {cancelling ? "Cancelling..." : "Yes, cancel invoice"}
             </button>
             <button type="button" className="link-button" onClick={() => setConfirmingCancel(false)}>
+              Never mind
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirmingDelete && (
+        <div className="cancel-confirm">
+          <p>
+            <TriangleAlert size={15} /> This will permanently delete invoice {invoice.invoiceNumber} — it cannot be
+            recovered afterwards. Stock is not affected either way (it was already restored when this invoice was
+            cancelled). Are you sure?
+          </p>
+          {deleteError && <p className="error-text">{deleteError}</p>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="button" className="danger-button" disabled={deleting} onClick={handleDelete}>
+              {deleting ? "Deleting..." : "Yes, delete invoice"}
+            </button>
+            <button type="button" className="link-button" onClick={() => setConfirmingDelete(false)}>
               Never mind
             </button>
           </div>
