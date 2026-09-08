@@ -19,6 +19,11 @@ const createInvoiceSchema = z.object({
   // out entirely (defaulting to 0) when the cashier doesn't use them.
   packagingCharge: z.number().nonnegative().default(0),
   transportCharge: z.number().nonnegative().default(0),
+  // Client-generated, stable across retries of the same checkout attempt —
+  // lets a lost-response/double-submit safely return the original invoice
+  // instead of creating a second one. Optional so older clients / direct API
+  // callers who don't send one still work exactly as before.
+  idempotencyKey: z.string().trim().min(1).optional(),
   items: z
     .array(
       z.object({
@@ -35,7 +40,31 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
   const data = createInvoiceSchema.parse(req.body);
   const actor = req.user!;
 
-  const invoice = await prisma.$transaction(async (tx) => {
+  if (data.idempotencyKey) {
+    const existing = await prisma.invoice.findUnique({
+      where: { idempotencyKey: data.idempotencyKey },
+      include: { items: true, customer: true, warehouse: true },
+    });
+    if (existing) {
+      // Same checkout attempt as before — hand back the invoice that was
+      // already created instead of billing/deducting stock a second time.
+      res.status(200).json(existing);
+      return;
+    }
+  }
+
+  async function runCreate() {
+    return prisma.$transaction(
+      async (tx) => {
+    const warehouse = await tx.warehouse.findUnique({ where: { id: data.warehouseId } });
+    if (!warehouse) throw new ApiError(400, "Warehouse not found");
+
+    let customer = null;
+    if (data.customerId !== undefined) {
+      customer = await tx.customer.findUnique({ where: { id: data.customerId } });
+      if (!customer) throw new ApiError(400, "Customer not found");
+    }
+
     const productIds = data.items.map((i) => i.productId);
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const productMap = new Map(products.map((p) => [p.id, p]));
@@ -116,6 +145,7 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
         invoiceNumber,
         customerId: data.customerId,
         warehouseId: data.warehouseId,
+        idempotencyKey: data.idempotencyKey,
         subtotal,
         taxAmount,
         ...(coupon
@@ -131,6 +161,14 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
         paymentMode: data.paymentMode,
         status: "paid",
         createdById: actor.id,
+        // Frozen at creation time — independent of whatever the Customer/
+        // Warehouse rows say later (see the Invoice model comment).
+        customerNameSnapshot: customer?.name ?? null,
+        customerPhoneSnapshot: customer?.phone ?? null,
+        customerGstSnapshot: customer?.gstNumber ?? null,
+        customerAddressSnapshot: customer?.address ?? null,
+        warehouseNameSnapshot: warehouse.name,
+        warehouseLocationSnapshot: warehouse.location,
         items: { create: itemsData },
       },
       include: { items: true, customer: true, warehouse: true },
@@ -188,7 +226,39 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
     });
 
     return created;
-  });
+      },
+      // Default 5s is comfortable for a normal cart but can be too tight for
+      // a very large one (many distinct line items each now doing 2 stock
+      // round-trips for the concurrency-safe update) — raised with headroom.
+      { timeout: 20000, maxWait: 10000 }
+    );
+  }
+
+  let invoice;
+  try {
+    invoice = await runCreate();
+  } catch (err) {
+    // Two near-simultaneous retries of the same checkout attempt can both
+    // pass the pre-check above and race to insert — Postgres's unique
+    // constraint on idempotency_key catches the loser here, so it gets back
+    // the same invoice the winner created instead of a raw 500.
+    if (
+      data.idempotencyKey &&
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002" &&
+      (err.meta?.target as string[] | undefined)?.includes("idempotency_key")
+    ) {
+      const existing = await prisma.invoice.findUnique({
+        where: { idempotencyKey: data.idempotencyKey },
+        include: { items: true, customer: true, warehouse: true },
+      });
+      if (existing) {
+        res.status(200).json(existing);
+        return;
+      }
+    }
+    throw err;
+  }
 
   res.status(201).json(invoice);
 
@@ -467,18 +537,18 @@ export const listInvoices = asyncHandler(async (req: Request, res: Response) => 
     };
   }
   if (invoiceNumber) {
-    where.invoiceNumber = { contains: String(invoiceNumber) };
+    where.invoiceNumber = { contains: String(invoiceNumber), mode: "insensitive" };
   }
   if (customer) {
     where.customer = {
       OR: [
-        { name: { contains: String(customer) } },
+        { name: { contains: String(customer), mode: "insensitive" } },
         { phone: { contains: String(customer) } },
       ],
     };
   }
   if (product) {
-    where.items = { some: { product: { name: { contains: String(product) } } } };
+    where.items = { some: { product: { name: { contains: String(product), mode: "insensitive" } } } };
   }
 
   const invoices = await prisma.invoice.findMany({
@@ -500,32 +570,43 @@ async function loadInvoicePdfData(id: number) {
   });
   if (!invoice) return null;
 
+  // Prefer the frozen snapshot taken at invoice creation time — falls back to
+  // the live Customer/Warehouse relation only for invoices created before
+  // the snapshot columns existed, so old invoices keep working unchanged.
+  const customerName = invoice.customerNameSnapshot ?? invoice.customer?.name ?? null;
+  const customerPhone = invoice.customerPhoneSnapshot ?? invoice.customer?.phone ?? null;
+  const customerGst = invoice.customerGstSnapshot ?? invoice.customer?.gstNumber ?? null;
+  const warehouseName = invoice.warehouseNameSnapshot ?? invoice.warehouse.name;
+  const warehouseLocation = invoice.warehouseLocationSnapshot ?? invoice.warehouse.location;
+
   return {
     invoice,
     pdfData: {
       invoiceNumber: invoice.invoiceNumber,
       createdAt: invoice.createdAt,
       paymentMode: invoice.paymentMode,
-      subtotal: Number(invoice.subtotal),
-      taxAmount: Number(invoice.taxAmount),
+      status: invoice.status,
+      // Formatted directly from the Decimal (not round-tripped through a
+      // plain JS Number) so the printed figure can never disagree with the
+      // amount actually saved, even by a paisa.
+      subtotal: invoice.subtotal.toFixed(2),
+      taxAmount: invoice.taxAmount.toFixed(2),
       couponCode: invoice.couponCode,
-      couponDiscountPercent: invoice.couponDiscountPercent ? Number(invoice.couponDiscountPercent) : null,
-      couponDiscountAmount: invoice.couponDiscountAmount ? Number(invoice.couponDiscountAmount) : null,
-      packagingCharge: Number(invoice.packagingCharge),
-      transportCharge: Number(invoice.transportCharge),
-      grandTotal: Number(invoice.grandTotal),
-      customer: invoice.customer
-        ? { name: invoice.customer.name, phone: invoice.customer.phone, gstNumber: invoice.customer.gstNumber }
-        : null,
-      warehouse: { name: invoice.warehouse.name, location: invoice.warehouse.location },
+      couponDiscountPercent: invoice.couponDiscountPercent ? invoice.couponDiscountPercent.toFixed(2) : null,
+      couponDiscountAmount: invoice.couponDiscountAmount ? invoice.couponDiscountAmount.toFixed(2) : null,
+      packagingCharge: invoice.packagingCharge.toFixed(2),
+      transportCharge: invoice.transportCharge.toFixed(2),
+      grandTotal: invoice.grandTotal.toFixed(2),
+      customer: customerName ? { name: customerName, phone: customerPhone, gstNumber: customerGst } : null,
+      warehouse: { name: warehouseName, location: warehouseLocation },
       items: invoice.items.map((item) => ({
         product: { name: item.product.name, sku: item.product.sku },
         qty: item.qty,
-        mrp: Number(item.mrp),
-        price: Number(item.price),
-        discount: Number(item.discount),
-        taxAmount: Number(item.taxAmount),
-        lineTotal: Number(item.lineTotal),
+        mrp: item.mrp.toFixed(2),
+        price: item.price.toFixed(2),
+        discount: item.discount.toFixed(2),
+        taxAmount: item.taxAmount.toFixed(2),
+        lineTotal: item.lineTotal.toFixed(2),
       })),
     },
   };

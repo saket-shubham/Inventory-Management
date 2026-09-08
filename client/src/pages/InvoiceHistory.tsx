@@ -96,7 +96,7 @@ export function InvoiceHistory() {
                   <td>
                     <span style={{ fontWeight: 600 }}>{inv.warehouse.name}</span>
                   </td>
-                  <td>{inv.customer?.name ?? <span className="muted">Walk-in</span>}</td>
+                  <td>{inv.customerNameSnapshot ?? inv.customer?.name ?? <span className="muted">Walk-in</span>}</td>
                   <td className="num text-center">
                     <span className="sidebar-badge" style={{ fontSize: "11px" }}>
                       {inv.items.length}

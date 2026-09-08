@@ -156,6 +156,14 @@ export interface Invoice {
   createdAt: string;
   items: InvoiceItem[];
   returns: Return[];
+  // Frozen at creation time — null on invoices created before this existed,
+  // in which case the current `customer`/`warehouse` values are still shown.
+  customerNameSnapshot?: string | null;
+  customerPhoneSnapshot?: string | null;
+  customerGstSnapshot?: string | null;
+  customerAddressSnapshot?: string | null;
+  warehouseNameSnapshot?: string | null;
+  warehouseLocationSnapshot?: string | null;
 }
 
 export interface Coupon {
