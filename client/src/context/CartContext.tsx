@@ -17,9 +17,17 @@ interface CartContextValue {
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
 
+// Rounds to 2 decimal places the same way the backend's Decimal-based totals
+// ultimately land — applied at each step (not just the final display) so the
+// cart's live preview can't accumulate the small binary floating-point drift
+// that comes from chaining several unrounded multiplications/divisions.
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 function discountedBase(line: CartLine): number {
-  const lineBase = Number(line.product.sellingPrice) * line.qty;
-  return Math.max(0, lineBase - Math.min(line.discount, lineBase));
+  const lineBase = round2(Number(line.product.sellingPrice) * line.qty);
+  return round2(Math.max(0, lineBase - Math.min(line.discount, lineBase)));
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -66,15 +74,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLines([]);
   }
 
-  const subtotal = useMemo(() => lines.reduce((sum, l) => sum + discountedBase(l), 0), [lines]);
+  const subtotal = useMemo(() => round2(lines.reduce((sum, l) => sum + discountedBase(l), 0)), [lines]);
 
   const taxAmount = useMemo(
-    () => lines.reduce((sum, l) => sum + (discountedBase(l) * Number(l.product.taxPercent)) / 100, 0),
+    () =>
+      round2(
+        lines.reduce((sum, l) => sum + round2((discountedBase(l) * Number(l.product.taxPercent)) / 100), 0)
+      ),
     [lines]
   );
 
   function grandTotal(discount: number) {
-    return Math.max(0, subtotal + taxAmount - discount);
+    return round2(Math.max(0, subtotal + taxAmount - round2(discount)));
   }
 
   return (

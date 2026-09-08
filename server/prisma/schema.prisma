@@ -258,6 +258,22 @@ model Invoice {
   // Set only when this invoice was generated from a Hold Invoice — either the
   // customer's "keep" decision, or an automatic expiry — never for a normal sale.
   holdInvoiceId         Int?          @unique @map("hold_invoice_id")
+  // Client-supplied, unique when present — lets a retried/duplicate "create
+  // invoice" request (network drop, double-submit) return the original
+  // invoice instead of creating a second one. Null for anything created
+  // before this existed.
+  idempotencyKey        String?       @unique @map("idempotency_key")
+  // Frozen at creation time, independent of the live Customer/Warehouse rows
+  // (which can be edited later) — a legal/GST document must never retroactively
+  // change just because someone corrected an unrelated customer record. Null
+  // for invoices created before this existed; display falls back to the live
+  // relation in that case.
+  customerNameSnapshot      String? @map("customer_name_snapshot")
+  customerPhoneSnapshot     String? @map("customer_phone_snapshot")
+  customerGstSnapshot       String? @map("customer_gst_snapshot")
+  customerAddressSnapshot   String? @map("customer_address_snapshot")
+  warehouseNameSnapshot     String? @map("warehouse_name_snapshot")
+  warehouseLocationSnapshot String? @map("warehouse_location_snapshot")
   createdById           Int?          @map("created_by_id")
   createdAt             DateTime      @default(now()) @map("created_at")
 
@@ -268,6 +284,9 @@ model Invoice {
   items       InvoiceItem[]
   returns     Return[]
 
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([warehouseId])
   @@map("invoices")
 }
 

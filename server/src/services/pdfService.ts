@@ -5,33 +5,48 @@ import { env } from "../config/env";
 interface InvoicePdfItem {
   product: { name: string; sku: string };
   qty: number;
-  mrp: number;
-  price: number;
-  discount: number;
-  taxAmount: number;
-  lineTotal: number;
+  mrp: string;
+  price: string;
+  discount: string;
+  taxAmount: string;
+  lineTotal: string;
 }
 
 interface InvoicePdfData {
   invoiceNumber: string;
   createdAt: Date;
   paymentMode: string;
-  subtotal: number;
-  taxAmount: number;
+  // Drives the CANCELLED marking below — anything other than "paid" is shown
+  // as void, since a cancelled invoice's PDF must never look like a valid one.
+  status: string;
+  // Already formatted to 2dp directly from the Decimal that's actually saved
+  // in the database — never round-tripped through a plain JS Number, so the
+  // printed figure can't silently disagree with the stored amount.
+  subtotal: string;
+  taxAmount: string;
   couponCode?: string | null;
-  couponDiscountPercent?: number | null;
-  couponDiscountAmount?: number | null;
-  packagingCharge?: number;
-  transportCharge?: number;
-  grandTotal: number;
+  couponDiscountPercent?: string | null;
+  couponDiscountAmount?: string | null;
+  packagingCharge?: string;
+  transportCharge?: string;
+  grandTotal: string;
   customer: { name: string; phone: string | null; gstNumber: string | null } | null;
   warehouse: { name: string; location: string | null };
   items: InvoicePdfItem[];
 }
 
-const money = (n: number) => n.toFixed(2);
-
 function renderInvoicePdf(doc: PDFKit.PDFDocument, invoice: InvoicePdfData) {
+  // A cancelled invoice's PDF must never be able to pass as a valid one —
+  // stamped first, underneath everything else, diagonally across the page.
+  if (invoice.status !== "paid") {
+    doc.save();
+    doc.fillColor("#e11d48").opacity(0.28);
+    doc.fontSize(72);
+    doc.rotate(-35, { origin: [300, 400] });
+    doc.text(invoice.status.toUpperCase(), 40, 380, { width: 520, align: "center" });
+    doc.restore();
+  }
+
   doc.fontSize(18).text(env.companyName, { continued: false });
   doc.fontSize(9).fillColor("#555");
   if (env.companyAddress) doc.text(env.companyAddress);
@@ -39,6 +54,10 @@ function renderInvoicePdf(doc: PDFKit.PDFDocument, invoice: InvoicePdfData) {
   doc.fillColor("#000").moveDown(1);
 
   doc.fontSize(14).text(`Invoice ${invoice.invoiceNumber}`, { align: "right" });
+  if (invoice.status !== "paid") {
+    doc.fontSize(11).fillColor("#e11d48").text(`STATUS: ${invoice.status.toUpperCase()}`, { align: "right" });
+    doc.fillColor("#000");
+  }
   doc.fontSize(9).text(`Date: ${invoice.createdAt.toLocaleString()}`, { align: "right" });
   doc.text(`Payment mode: ${invoice.paymentMode.toUpperCase()}`, { align: "right" });
   doc.text(`Billed from: ${invoice.warehouse.name}${invoice.warehouse.location ? ` (${invoice.warehouse.location})` : ""}`, {
@@ -79,11 +98,11 @@ function renderInvoicePdf(doc: PDFKit.PDFDocument, invoice: InvoicePdfData) {
     const row = [
       `${item.product.name} (${item.product.sku})`,
       String(item.qty),
-      money(item.mrp),
-      money(item.price),
-      money(item.discount),
-      money(item.taxAmount),
-      money(item.lineTotal),
+      item.mrp,
+      item.price,
+      item.discount,
+      item.taxAmount,
+      item.lineTotal,
     ];
     row.forEach((value, i) => {
       const col = columns[i];
@@ -96,28 +115,30 @@ function renderInvoicePdf(doc: PDFKit.PDFDocument, invoice: InvoicePdfData) {
   doc.moveTo(40, y + 4).lineTo(500, y + 4).strokeColor("#ccc").stroke();
   y += 14;
 
-  const totals: Array<[string, number]> = [
+  // Every value here is already a Decimal-precise, 2dp-formatted string —
+  // built straight from the database, never re-parsed as a JS number.
+  const totals: Array<[string, string]> = [
     ["Subtotal", invoice.subtotal],
     ["Tax", invoice.taxAmount],
   ];
   // Coupon row only appears when a coupon was actually applied to this invoice.
-  if (invoice.couponCode && invoice.couponDiscountAmount) {
-    totals.push([`Coupon (${invoice.couponCode}, ${invoice.couponDiscountPercent}%)`, -invoice.couponDiscountAmount]);
+  if (invoice.couponCode && invoice.couponDiscountAmount && Number(invoice.couponDiscountAmount) > 0) {
+    totals.push([`Coupon (${invoice.couponCode}, ${invoice.couponDiscountPercent}%)`, `-${invoice.couponDiscountAmount}`]);
   }
   // Packaging/Transport rows only appear when actually entered on this invoice.
-  if (invoice.packagingCharge) {
+  if (invoice.packagingCharge && Number(invoice.packagingCharge) > 0) {
     totals.push(["Packaging Charges", invoice.packagingCharge]);
   }
-  if (invoice.transportCharge) {
+  if (invoice.transportCharge && Number(invoice.transportCharge) > 0) {
     totals.push(["Transport Charges", invoice.transportCharge]);
   }
   for (const [label, value] of totals) {
     doc.text(label, 350, y, { width: 90, align: "right" });
-    doc.text(money(value), 440, y, { width: 60, align: "right" });
+    doc.text(value, 440, y, { width: 60, align: "right" });
     y += 16;
   }
   doc.fontSize(11).text("Grand Total", 350, y, { width: 90, align: "right" });
-  doc.text(money(invoice.grandTotal), 440, y, { width: 60, align: "right" });
+  doc.text(invoice.grandTotal, 440, y, { width: 60, align: "right" });
 }
 
 export function streamInvoicePdf(res: Response, invoice: InvoicePdfData) {

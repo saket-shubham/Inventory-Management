@@ -9,6 +9,32 @@ import { ProductLookupCard } from "../components/ProductLookupCard";
 import { CartTable } from "../components/CartTable";
 import type { Customer, PaymentMode, Product, Warehouse } from "../types";
 
+const IDEMPOTENCY_STORAGE_KEY = "billing.invoiceIdempotencyKey";
+
+// Stable across retries of the same checkout attempt (network drop, a stray
+// double-submit) — sessionStorage so it even survives a page refresh in the
+// same tab — but discarded the moment the cart actually changes or the
+// invoice succeeds, so a genuinely new order never gets stuck replaying an
+// old one.
+function getOrCreateIdempotencyKey(): string {
+  let key = sessionStorage.getItem(IDEMPOTENCY_STORAGE_KEY);
+  if (!key) {
+    key = crypto.randomUUID();
+    sessionStorage.setItem(IDEMPOTENCY_STORAGE_KEY, key);
+  }
+  return key;
+}
+
+function clearIdempotencyKey() {
+  sessionStorage.removeItem(IDEMPOTENCY_STORAGE_KEY);
+}
+
+// Rounds to 2 decimal places, matching the backend's Decimal precision — see
+// the same helper's comment in CartContext.tsx.
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 export function Billing() {
   const navigate = useNavigate();
   const cart = useCart();
@@ -63,6 +89,13 @@ export function Billing() {
     }, 250);
     return () => clearTimeout(handle);
   }, [customerSearch]);
+
+  // A changed cart is a different order, not a retry of the last one — drop
+  // any in-flight idempotency key so the next Generate Invoice gets a fresh
+  // one instead of replaying whatever the previous cart contents were.
+  useEffect(() => {
+    clearIdempotencyKey();
+  }, [cart.lines]);
 
   async function handleScan(barcode: string) {
     setLookupError(null);
@@ -137,13 +170,13 @@ export function Billing() {
     setCouponError(null);
   }
 
-  const couponDiscountAmount = appliedCoupon ? (cart.subtotal * appliedCoupon.discountPercent) / 100 : 0;
+  const couponDiscountAmount = appliedCoupon ? round2((cart.subtotal * appliedCoupon.discountPercent) / 100) : 0;
 
   // Empty/invalid/negative all safely collapse to "not charged" — never lets
   // a bad value slip into the total.
   function parseCharge(input: string): number {
     const n = Number(input);
-    return input.trim() !== "" && Number.isFinite(n) && n > 0 ? n : 0;
+    return input.trim() !== "" && Number.isFinite(n) && n > 0 ? round2(n) : 0;
   }
 
   const packagingCharge = parseCharge(packagingChargeInput);
@@ -155,6 +188,7 @@ export function Billing() {
     setSubmitError(null);
     try {
       const customerId = await resolveCustomerId();
+      const idempotencyKey = getOrCreateIdempotencyKey();
       const res = await api.post("/invoices", {
         warehouseId: cart.warehouseId,
         customerId,
@@ -162,6 +196,7 @@ export function Billing() {
         ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
         packagingCharge,
         transportCharge,
+        idempotencyKey,
         items: cart.lines.map((l) => ({
           productId: l.product.id,
           qty: l.qty,
@@ -169,6 +204,7 @@ export function Billing() {
           barcodeScanned: l.barcodeScanned,
         })),
       });
+      clearIdempotencyKey();
       cart.clear();
       setSelectedCustomer(null);
       removeCoupon();
@@ -204,7 +240,7 @@ export function Billing() {
     }
   }
 
-  const grandTotal = cart.grandTotal(couponDiscountAmount) + packagingCharge + transportCharge;
+  const grandTotal = round2(cart.grandTotal(couponDiscountAmount) + packagingCharge + transportCharge);
 
   return (
     <div className="billing-page">

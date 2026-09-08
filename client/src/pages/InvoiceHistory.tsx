@@ -93,7 +93,7 @@ export function InvoiceHistory() {
                 </td>
                 <td>{new Date(inv.createdAt).toLocaleDateString()}</td>
                 <td>{inv.warehouse.name}</td>
-                <td>{inv.customer?.name ?? "Walk-in"}</td>
+                <td>{inv.customerNameSnapshot ?? inv.customer?.name ?? "Walk-in"}</td>
                 <td>{inv.items.length}</td>
                 <td>₹{Number(inv.grandTotal).toFixed(2)}</td>
                 <td>{inv.paymentMode.toUpperCase()}</td>

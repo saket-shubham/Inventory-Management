@@ -49,6 +49,13 @@ export function InvoiceDetail() {
 
   const pdfUrl = `${api.defaults.baseURL}/invoices/${invoice.id}/pdf`;
 
+  // Prefer the frozen snapshot (what was true when this invoice was made) —
+  // falls back to the live customer relation only for invoices created
+  // before the snapshot existed. Keeps this record from silently changing if
+  // the customer's profile is edited later.
+  const billToName = invoice.customerNameSnapshot ?? invoice.customer?.name ?? null;
+  const billToGst = invoice.customerGstSnapshot ?? invoice.customer?.gstNumber ?? null;
+
   const whatsappUrl = invoice.customer?.phone
     ? `https://wa.me/${toWhatsAppNumber(invoice.customer.phone)}?text=${encodeURIComponent(
         `Hi ${invoice.customer.name}, thank you for your purchase!\nInvoice: ${invoice.invoiceNumber}\nTotal: ₹${Number(invoice.grandTotal).toFixed(2)}\n${invoice.warehouse.name}`
@@ -127,7 +134,7 @@ export function InvoiceDetail() {
             {invoice.invoiceNumber} <StatusBadge status={invoice.status} />
           </h2>
           <p className="muted">
-            {new Date(invoice.createdAt).toLocaleString()} · {invoice.warehouse.name}
+            {new Date(invoice.createdAt).toLocaleString()} · {invoice.warehouseNameSnapshot ?? invoice.warehouse.name}
           </p>
         </div>
         <div className="invoice-actions">
@@ -213,9 +220,11 @@ export function InvoiceDetail() {
         </div>
       )}
 
-      {invoice.customer && (
+      {billToName && (
         <p>
-          <strong>Customer:</strong> {invoice.customer.name} {invoice.customer.phone ?? ""}
+          <strong>Customer:</strong> {billToName}{" "}
+          {invoice.customerPhoneSnapshot ?? invoice.customer?.phone ?? ""}
+          {billToGst && ` · GSTIN: ${billToGst}`}
         </p>
       )}
       {emailResult && (
