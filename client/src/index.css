@@ -472,22 +472,17 @@ label {
   border-bottom: 1px solid var(--border-soft);
 }
 
-.sidebar-brand .brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: var(--brand-mark-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 0 6px 18px -3px rgba(var(--brand-rgb), 0.5);
+.sidebar-brand-logo {
+  height: 40px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
 
-.sidebar-brand:hover .brand-mark {
-  transform: rotate(-6deg) scale(1.06);
+.sidebar-brand:hover .sidebar-brand-logo {
+  transform: scale(1.04);
 }
 
 .sidebar-brand-text {
@@ -865,16 +860,11 @@ label {
   z-index: 1;
 }
 
-.auth-card .brand-mark {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: var(--brand-mark-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 0 10px 25px -5px rgba(var(--brand-rgb), 0.5);
+.auth-brand-logo {
+  height: 72px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
   margin-bottom: 6px;
 }
 

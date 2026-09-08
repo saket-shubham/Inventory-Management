@@ -75,11 +75,8 @@ export function Layout() {
       <aside className={`app-sidebar${mobileOpen ? " open" : ""}`}>
         {/* Brand Header */}
         <div className="sidebar-brand">
-          <div className="brand-mark">
-            <ScanLine size={20} strokeWidth={2.4} />
-          </div>
+          <img src="/logo.png" alt="Eze Living" className="sidebar-brand-logo" />
           <div className="sidebar-brand-text">
-            <span className="sidebar-brand-title">Apex POS</span>
             <span className="sidebar-brand-subtitle">Smart Inventory</span>
           </div>
           {mobileOpen && (

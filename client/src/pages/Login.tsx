@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, ScanLine, TriangleAlert } from "lucide-react";
+import { Eye, EyeOff, TriangleAlert } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { apiErrorMessage } from "../api/client";
 
@@ -32,11 +32,8 @@ export function Login() {
   return (
     <div className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <span className="brand-mark">
-          <ScanLine size={22} strokeWidth={2.4} />
-        </span>
+        <img src="/logo.png" alt="Eze Living" className="auth-brand-logo" />
         <div>
-          <h1>Billing App</h1>
           <p className="muted" style={{ margin: "4px 0 0" }}>
             Sign in to start billing
           </p>
