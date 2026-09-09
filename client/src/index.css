@@ -611,14 +611,6 @@ label {
   text-overflow: ellipsis;
 }
 
-.sidebar-footer-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 4px;
-}
-
 .sidebar-logout-btn {
   background: none;
   box-shadow: none;
@@ -792,6 +784,59 @@ label {
 
 .mode-switch-btn:hover {
   transform: rotate(-14deg) scale(1.05);
+}
+
+/* Profile dropdown — triggered by the small topbar avatar, holds the theme
+   toggle and sign-out (moved here from the always-visible sidebar footer). */
+.profile-menu {
+  position: relative;
+}
+
+.topbar-avatar-btn {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 2px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  transition: transform 0.15s ease;
+}
+
+.topbar-avatar-btn:hover {
+  transform: scale(1.06);
+  background: none;
+  box-shadow: none;
+}
+
+.profile-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 230px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+}
+
+.profile-menu-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 2px 0;
+}
+
+.profile-menu-logout {
+  width: 100%;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
 }
 
 .app-main {
