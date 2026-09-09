@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   ScanLine,
@@ -44,11 +44,26 @@ export function Layout() {
   const { lines } = useCart();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Close mobile sidebar on route change
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // Close the profile dropdown on an outside click, same convention as any
+  // other popover in the app.
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileMenuOpen]);
 
   const pageMeta = getPageMeta(location.pathname);
   const PageIcon = pageMeta.Icon;
@@ -165,7 +180,8 @@ export function Layout() {
           )}
         </nav>
 
-        {/* Sidebar Footer with User Profile & Theme */}
+        {/* Sidebar Footer — user identity only; theme + sign-out now live in
+            the profile dropdown behind the topbar avatar (see below). */}
         <div className="sidebar-footer">
           <div className="sidebar-user-card">
             <div className="avatar">{initials}</div>
@@ -175,31 +191,6 @@ export function Layout() {
               </p>
               <span className="role-badge">{user?.role ?? "staff"}</span>
             </div>
-          </div>
-
-          <div className="sidebar-footer-actions">
-            <div className="theme-switcher">
-              <button
-                type="button"
-                className="mode-switch-btn"
-                onClick={toggleMode}
-                title={mode === "light" ? "Switch to dark mode" : "Switch to light mode"}
-                aria-label="Toggle theme"
-              >
-                {mode === "light" ? <Moon size={14} /> : <Sun size={14} />}
-              </button>
-              <span className="theme-switcher-label">{mode === "light" ? "Light" : "Dark"}</span>
-            </div>
-
-            <button
-              type="button"
-              className="sidebar-logout-btn"
-              onClick={logout}
-              title="Sign out of system"
-            >
-              <LogOut size={14} />
-              <span>Exit</span>
-            </button>
           </div>
         </div>
       </aside>
@@ -228,8 +219,58 @@ export function Layout() {
               <span className="counter-chip-dot" />
               <span>Active Session</span>
             </div>
-            <div className="avatar" title={user?.name} style={{ width: 30, height: 30, fontSize: "11px" }}>
-              {initials}
+            <div className="profile-menu" ref={profileMenuRef}>
+              <button
+                type="button"
+                className="topbar-avatar-btn"
+                onClick={() => setProfileMenuOpen((v) => !v)}
+                title={user?.name}
+                aria-label="Account menu"
+                aria-expanded={profileMenuOpen}
+              >
+                <div className="avatar" style={{ width: 30, height: 30, fontSize: "11px" }}>
+                  {initials}
+                </div>
+              </button>
+
+              {profileMenuOpen && (
+                <div className="profile-menu-dropdown">
+                  <div className="sidebar-user-card">
+                    <div className="avatar">{initials}</div>
+                    <div className="sidebar-user-info">
+                      <p className="sidebar-user-name" title={user?.name}>
+                        {user?.name ?? "Logged In"}
+                      </p>
+                      <span className="role-badge">{user?.role ?? "staff"}</span>
+                    </div>
+                  </div>
+
+                  <div className="profile-menu-divider" />
+
+                  <div className="theme-switcher" style={{ justifyContent: "space-between", width: "100%" }}>
+                    <span className="theme-switcher-label">{mode === "light" ? "Light" : "Dark"}</span>
+                    <button
+                      type="button"
+                      className="mode-switch-btn"
+                      onClick={toggleMode}
+                      title={mode === "light" ? "Switch to dark mode" : "Switch to light mode"}
+                      aria-label="Toggle theme"
+                    >
+                      {mode === "light" ? <Moon size={14} /> : <Sun size={14} />}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="sidebar-logout-btn profile-menu-logout"
+                    onClick={logout}
+                    title="Sign out of system"
+                  >
+                    <LogOut size={14} />
+                    <span>Exit</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>
