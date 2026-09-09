@@ -11,8 +11,6 @@ import { sweepExpiredHolds } from "../services/holdExpiry";
 
 const HOLD_VALIDITY_DAYS = 3;
 
-const holdItemsInclude = { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true } as const;
-
 const createHoldSchema = z.object({
   warehouseId: z.number().int(),
   customerId: z.number().int().optional(),
@@ -75,7 +73,7 @@ export const createHoldInvoice = asyncHandler(async (req: Request, res: Response
           }),
         },
       },
-      include: holdItemsInclude,
+      include: { items: { include: { product: true } }, customer: true, warehouse: true },
     });
 
     // Deduct held quantities from available stock immediately — they can't be
@@ -141,8 +139,8 @@ export const listHoldInvoices = asyncHandler(async (req: Request, res: Response)
       : undefined;
 
   const holds = await prisma.holdInvoice.findMany({
-    where: status ? { status } : {},
-    include: holdItemsInclude,
+    where: status ? { status } : undefined,
+    include: { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true },
     orderBy: { createdAt: "desc" },
     take: 200,
   });
@@ -155,10 +153,9 @@ export const getHoldInvoice = asyncHandler(async (req: Request, res: Response) =
 
   const hold = await prisma.holdInvoice.findUnique({
     where: { id },
-    include: holdItemsInclude,
+    include: { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true },
   });
   if (!hold) throw new ApiError(404, "Hold invoice not found");
-
   res.json(hold);
 });
 
@@ -341,7 +338,7 @@ export const processHoldInvoice = asyncHandler(async (req: Request, res: Respons
 
     return tx.holdInvoice.findUniqueOrThrow({
       where: { id: hold.id },
-      include: holdItemsInclude,
+      include: { items: { include: { product: true } }, customer: true, warehouse: true, finalInvoice: true },
     });
   });
 
