@@ -4,19 +4,19 @@
   --font-sans: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Manrope", "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
 
-  /* Brand — Electric Indigo & Vivid Violet (accent: violet, the default) */
-  --brand-rgb: 99, 102, 241;
-  --brand-50: #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-300: #a5b4fc;
-  --brand-400: #818cf8;
-  --brand-500: #6366f1;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
-  --brand-800: #3730a3;
-  --brand-900: #312e81;
-  --brand-mark-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #4f46e5 100%);
+  /* Brand — Eze Living Maroon (matches the logo's deep burgundy wordmark) */
+  --brand-rgb: 150, 22, 47;
+  --brand-50: #fbeaee;
+  --brand-100: #f4cdd6;
+  --brand-200: #e8a0b0;
+  --brand-300: #d97086;
+  --brand-400: #bd3a53;
+  --brand-500: #96162f;
+  --brand-600: #7a1027;
+  --brand-700: #630c1f;
+  --brand-800: #4a0817;
+  --brand-900: #33050f;
+  --brand-mark-gradient: linear-gradient(135deg, #96162f 0%, #bd3a53 50%, #7a1027 100%);
 
   /* Neutrals & Surfaces - Soothing, Eye-Friendly Palette */
   --bg: #e6edf5;
@@ -68,8 +68,8 @@
 
   --shadow-xs: 0 1px 3px rgba(15, 23, 42, 0.08);
   --shadow-sm: 0 3px 6px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 12px 28px -6px rgba(15, 23, 42, 0.12), 0 8px 12px -6px rgba(99, 102, 241, 0.14);
-  --shadow-lg: 0 20px 40px -10px rgba(15, 23, 42, 0.16), 0 10px 20px -5px rgba(99, 102, 241, 0.15);
+  --shadow-md: 0 12px 28px -6px rgba(15, 23, 42, 0.12), 0 8px 12px -6px rgba(var(--brand-rgb), 0.14);
+  --shadow-lg: 0 20px 40px -10px rgba(15, 23, 42, 0.16), 0 10px 20px -5px rgba(var(--brand-rgb), 0.15);
   --shadow-xl: 0 25px 50px -12px rgba(15, 23, 42, 0.22);
 
   /* Layered Glassmorphism */
